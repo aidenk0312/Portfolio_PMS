@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  image       String?
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  issues      Issue[]      @relation("AssigneeIssues")
+  comments    Comment[]    @relation("AuthorComments")
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  workspaces  Workspace[]
+  auditLogs   AuditLog[]
+}
+
+model Membership {
+  id     String       @id @default(cuid())
+  role   Role
+  user   User         @relation(fields: [userId], references: [id])
+  userId String
+  org    Organization @relation(fields: [orgId], references: [id])
+  orgId  String
+
+  @@unique([userId, orgId])
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Workspace {
+  id        String       @id @default(cuid())
+  name      String
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  boards    Board[]
+  issues    Issue[]
+  createdAt DateTime     @default(now())
+}
+
+model Board {
+  id          String        @id @default(cuid())
+  name        String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  columns     BoardColumn[]
+  order       Int           @default(0)
+}
+
+model BoardColumn {
+  id      String  @id @default(cuid())
+  name    String
+  order   Int     @default(0)
+  board   Board   @relation(fields: [boardId], references: [id])
+  boardId String
+  issues  Issue[]
+}
+
+model Issue {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  assignee    User?        @relation("AssigneeIssues", fields: [assigneeId], references: [id])
+  assigneeId  String?
+  status      String       @default("todo")
+  dueAt       DateTime?
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  column      BoardColumn? @relation(fields: [columnId], references: [id])
+  columnId    String?
+  comments    Comment[]
+  createdAt   DateTime     @default(now())
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  body      String
+  issue     Issue    @relation(fields: [issueId], references: [id])
+  issueId   String
+  author    User     @relation("AuthorComments", fields: [authorId], references: [id])
+  authorId  String
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  actorId   String?
+  action    String
+  target    String?
+  meta      Json?
+  createdAt DateTime     @default(now())
+}
