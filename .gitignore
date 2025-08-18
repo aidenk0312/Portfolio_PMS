@@ -1,0 +1,44 @@
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Turbo
+.turbo/
+
+# Env (keep only example files)
+.env
+.env.*
+apps/*/.env
+apps/*/.env.*
+!*.env.example
+!apps/*/.env.example
+!apps/*/.env.sample
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+apps/web/.vercel/
+apps/web/coverage/
+
+# NestJS
+apps/api/dist/
+apps/api/coverage/
+
+# Logs / Misc
+logs/
+*.log
+*.pid
+*.pid.lock
+package-lock.json
+
+coverage/
+.eslintcache
+**/.DS_Store
