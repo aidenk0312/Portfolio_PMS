@@ -1,6 +1,5 @@
 # Portfolio PMS — Project Management System
-협업 환경을 염두에 둔 칸반 기반 프로젝트 관리 시스템 Next.js + NestJS + Prisma + Postgres/Redis로 구현합니다.
-모노레포, Docker, 타입 안정성에 집중했습니다.
+- TL;DR: 원격/협업 환경을 염두에 둔 칸반 기반 PMS를 Next.js + NestJS + Prisma + Postgres/Redis로 구현합니다.
 
 ## 주요 기능
 - [x] Docker 기반 Postgres/Redis
