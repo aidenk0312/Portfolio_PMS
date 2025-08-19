@@ -5,6 +5,7 @@
 - [x] Docker 기반 Postgres/Redis
 - [x] Prisma 스키마/마이그레이션
 - [x] /health, /health/db 헬스 체크
+- [x] 프론트: API 프록시 설정(Next → Nest 3001) + 헬스 대시보드 페이지
 - [ ] 보드/컬럼/이슈 CRUD
   - [ ] 보드 API
   - [ ] 컬럼 API
@@ -16,6 +17,7 @@
 
 ## 아키텍처
 - **Frontend: Next.js(App Router, TS, Tailwind) — 예정**
+- **Rewrites: `/api/*` → `http://localhost:3001/*`**
 - **Backend: NestJS(Typescript) + Prisma**
 - **DB/Cache: PostgreSQL 16, Redis 7 (Docker)**
 - **Repo: pnpm + Turborepo 모노레포**
@@ -43,6 +45,7 @@ pnpm dev
 ## API 확인
 - **GET /health**
 - **GET /health/db**
+- **웹에서 확인: http://localhost:3000 접속 → 메인 페이지에 두 JSON 박스 표시**
 
 ## 기술 선택 & 의사결정
 - **모노레포: 프론트/백/공유 패키지 일원화로 협업·배포 단순화**
@@ -53,6 +56,7 @@ pnpm dev
 ## 트러블슈팅
 - **포트 충돌 → infra/docker-compose.yml/main.ts에서 포트 조정**
 - **Prisma 오류 → pnpm prisma format && pnpm prisma validate**
+- **/api/* 404 →** `apps/web/next.config.ts` 저장 후 프론트 dev 서버 재시작**
 
 ## 로드맵
 - [ ] 보드/이슈 도메인 설계 문서 공개
