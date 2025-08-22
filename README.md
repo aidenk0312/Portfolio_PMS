@@ -10,6 +10,10 @@
   - [ ] 보드 API
   - [ ] 컬럼 API
   - [ ] 이슈 API
+- [x] 보드/컬럼/이슈 CRUD
+  - [x] 보드 API
+  - [x] 컬럼 API
+  - [x] 이슈 API
 - [ ] 프런트 칸반 UI (Drag & Drop)
 - [ ] 인증(이메일/소셜), 조직/워크스페이스 권한
 - [ ] 감사 로그 & 액티비티 피드
@@ -43,9 +47,24 @@ pnpm dev
 ~~~
 
 ## API 확인
-- **GET /health**
-- **GET /health/db**
-- **웹에서 확인: http://localhost:3000 접속 → 메인 페이지에 두 JSON 박스 표시**
+### Boards
+- `GET /boards?workspaceId=...`
+- `GET /boards/:id`
+- `POST /boards`
+- `PATCH /boards/:id`
+- `DELETE /boards/:id`
+
+### Columns
+- `GET /columns?boardId=...`
+- `POST /columns`
+- `PATCH /columns/:id`
+- `DELETE /columns/:id`
+
+### Issues
+- `GET /issues?workspaceId=...&columnId=...`
+- `POST /issues`
+- `PATCH /issues/:id`
+- `DELETE /issues/:id`
 
 ## 기술 선택 & 의사결정
 - **모노레포: 프론트/백/공유 패키지 일원화로 협업·배포 단순화**
@@ -57,6 +76,26 @@ pnpm dev
 - **포트 충돌 → infra/docker-compose.yml/main.ts에서 포트 조정**
 - **Prisma 오류 → pnpm prisma format && pnpm prisma validate**
 - **/api/* 404 →** `apps/web/next.config.ts` 저장 후 프론트 dev 서버 재시작**
+- #### 빠른 스모크 테스트(curl)
+```bash
+# Workspace id 준비(Prisma Studio로 생성 후 복사)
+WS=<your-workspace-id>
+
+# 1) Board
+BOARD_ID=$(curl -s -X POST http://localhost:3001/boards \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Sprint Board\",\"workspaceId\":\"$WS\"}" | jq -r '.id')
+
+# 2) Column
+COLUMN_ID=$(curl -s -X POST http://localhost:3001/columns \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Todo\",\"boardId\":\"$BOARD_ID\",\"order\":0}" | jq -r '.id')
+
+# 3) Issue
+curl -s -X POST http://localhost:3001/issues \
+  -H 'Content-Type: application/json' \
+  -d "{\"title\":\"첫 이슈\",\"workspaceId\":\"$WS\",\"columnId\":\"$COLUMN_ID\"}" | jq .
+```
 
 ## 로드맵
 - [ ] 보드/이슈 도메인 설계 문서 공개
