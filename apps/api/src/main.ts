@@ -1,16 +1,25 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+    const app = await NestFactory.create(AppModule);
 
-  // CORS 필요 시 주석 해제
-  // app.enableCors({ origin: 'http://localhost:3000', credentials: true });
+    // CORS 필요 주석 해제
+    // app.enableCors({ origin: 'http://localhost:3000', credentials: true });
 
-  app.enableShutdownHooks(); // ✅ SIGINT/SIGTERM 시 OnModuleDestroy 호출
+    app.useGlobalPipes(
+        new ValidationPipe({
+            whitelist: true,
+            forbidNonWhitelisted: true,
+            transform: true,
+        }),
+    );
 
-  const PORT = Number(process.env.PORT) || 3001;
-  await app.listen(PORT);
-  console.log(`✅ API server listening on http://localhost:${PORT}`);
+    app.enableShutdownHooks();
+
+    const PORT = Number(process.env.PORT) || 3001;
+    await app.listen(PORT);
+    console.log(`✅ API server listening on http://localhost:${PORT}`);
 }
 bootstrap();
