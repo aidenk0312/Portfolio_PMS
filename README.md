@@ -66,6 +66,16 @@ pnpm dev
 - `PATCH /issues/:id`
 - `DELETE /issues/:id`
 
+### 웹 실행 (칸반)
+```bash
+# 워크스페이스 ID 설정 (Prisma Studio에서 만든 값)
+echo 'NEXT_PUBLIC_WORKSPACE_ID="<your-workspace-id>"' > apps/web/.env.local
+
+pnpm dev
+# Web: http://localhost:3000/kanban
+# API: http://localhost:3001
+```
+
 ## 기술 선택 & 의사결정
 - **모노레포: 프론트/백/공유 패키지 일원화로 협업·배포 단순화**
 - **Prisma: 타입 안전한 DB 액세스 + 마이그레이션 이력 관리**
@@ -76,6 +86,9 @@ pnpm dev
 - **포트 충돌 → infra/docker-compose.yml/main.ts에서 포트 조정**
 - **Prisma 오류 → pnpm prisma format && pnpm prisma validate**
 - **/api/* 404 →** `apps/web/next.config.ts` 저장 후 프론트 dev 서버 재시작**
+- `ECONNREFUSED /api/*` → API(3001) 꺼짐. `pnpm -C apps/api dev` 로 기동/로그 확인
+- `Prisma P1001` → DB 접속 실패. Docker 컨테이너 상태 확인, `.env`의 호스트를 `127.0.0.1:5432` 로
+  
 - #### 빠른 스모크 테스트(curl)
 ```bash
 # Workspace id 준비(Prisma Studio로 생성 후 복사)
