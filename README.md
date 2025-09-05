@@ -38,17 +38,6 @@ pnpm-workspace.yaml
 turbo.json
 ~~~
 
-## 빠른 시작
-~~~text
-pnpm i
-docker compose -f infra/docker-compose.yml up -d
-cp apps/api/.env.example apps/api/.env
-cd apps/api && pnpm prisma migrate dev --name init
-# -----
-pnpm dev
-# API: http://localhost:3001
-~~~
-
 ## API 확인
 ### Boards
 - `GET /boards?workspaceId=...`
