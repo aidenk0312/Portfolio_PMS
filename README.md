@@ -5,19 +5,22 @@
 - [x] Docker 기반 Postgres/Redis
 - [x] Prisma 스키마/마이그레이션
 - [x] /health, /health/db 헬스 체크
+- [x] 칸반 Drag & Drop (이슈 정렬/이동)
 - [x] 프론트: API 프록시 설정(Next → Nest 3001) + 헬스 대시보드 페이지
-- [ ] 보드/컬럼/이슈 CRUD
-  - [ ] 보드 API
-  - [ ] 컬럼 API
-  - [ ] 이슈 API
 - [x] 보드/컬럼/이슈 CRUD
   - [x] 보드 API
   - [x] 컬럼 API
   - [x] 이슈 API
-- [ ] 프런트 칸반 UI (Drag & Drop)
 - [ ] 인증(이메일/소셜), 조직/워크스페이스 권한
 - [ ] 감사 로그 & 액티비티 피드
 - [ ] CI/CD 및 배포
+
+## 웹 프론트 (Kanban)
+- 경로: `http://localhost:3000/kanban`
+- 요구 환경변수: `apps/web/.env.local` → `NEXT_PUBLIC_WORKSPACE_ID=<워크스페이스ID>`
+- 서버 연동:
+  - `PATCH /issues/:id` (컬럼 변경)
+  - `POST /columns/:id/reorder` (해당 컬럼 내 이슈 순서 반영)
 
 ## 아키텍처
 - **Frontend: Next.js(App Router, TS, Tailwind) — 예정**
@@ -65,16 +68,6 @@ pnpm dev
 - `POST /issues`
 - `PATCH /issues/:id`
 - `DELETE /issues/:id`
-
-### 웹 실행 (칸반)
-```bash
-# 워크스페이스 ID 설정 (Prisma Studio에서 만든 값)
-echo 'NEXT_PUBLIC_WORKSPACE_ID="<your-workspace-id>"' > apps/web/.env.local
-
-pnpm dev
-# Web: http://localhost:3000/kanban
-# API: http://localhost:3001
-```
 
 ## 기술 선택 & 의사결정
 - **모노레포: 프론트/백/공유 패키지 일원화로 협업·배포 단순화**
