@@ -82,27 +82,6 @@ pnpm dev
 - `ECONNREFUSED /api/*` → API(3001) 꺼짐. `pnpm -C apps/api dev` 로 기동/로그 확인
 - `Prisma P1001` → DB 접속 실패. Docker 컨테이너 상태 확인, `.env`의 호스트를 `127.0.0.1:5432` 로
   
-- #### 빠른 스모크 테스트(curl)
-```bash
-# Workspace id 준비(Prisma Studio로 생성 후 복사)
-WS=<your-workspace-id>
-
-# 1) Board
-BOARD_ID=$(curl -s -X POST http://localhost:3001/boards \
-  -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Sprint Board\",\"workspaceId\":\"$WS\"}" | jq -r '.id')
-
-# 2) Column
-COLUMN_ID=$(curl -s -X POST http://localhost:3001/columns \
-  -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Todo\",\"boardId\":\"$BOARD_ID\",\"order\":0}" | jq -r '.id')
-
-# 3) Issue
-curl -s -X POST http://localhost:3001/issues \
-  -H 'Content-Type: application/json' \
-  -d "{\"title\":\"첫 이슈\",\"workspaceId\":\"$WS\",\"columnId\":\"$COLUMN_ID\"}" | jq .
-```
-
 ## 로드맵
 - [ ] 보드/이슈 도메인 설계 문서 공개
 - [ ] 칸반 UI + 낙관적 업데이트
