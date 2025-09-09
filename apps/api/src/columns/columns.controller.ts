@@ -1,30 +1,34 @@
-import { Controller, Get, Query, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { ColumnsService } from './columns.service';
 import { CreateColumnDto } from './dto/create-column.dto';
 import { UpdateColumnDto } from './dto/update-column.dto';
 
 @Controller('columns')
 export class ColumnsController {
-    constructor(private readonly columns: ColumnsService) {}
+    constructor(private readonly columnsService: ColumnsService) {}
 
-    // GET /columns?boardId=xxx
     @Get()
     findMany(@Query('boardId') boardId: string) {
-        return this.columns.findMany(boardId);
+        return this.columnsService.findMany(boardId);
     }
 
     @Post()
     create(@Body() dto: CreateColumnDto) {
-        return this.columns.create(dto);
+        return this.columnsService.create(dto);
     }
 
     @Patch(':id')
     update(@Param('id') id: string, @Body() dto: UpdateColumnDto) {
-        return this.columns.update(id, dto);
+        return this.columnsService.update(id, dto);
     }
 
     @Delete(':id')
     remove(@Param('id') id: string) {
-        return this.columns.remove(id);
+        return this.columnsService.remove(id);
+    }
+
+    @Post(':id/reorder')
+    reorder(@Param('id') id: string, @Body() body: { issueIds: string[] }) {
+        return this.columnsService.reorder(id, body);
     }
 }
