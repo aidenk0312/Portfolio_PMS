@@ -1,3 +1,6 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
 CREATE TYPE "public"."Role" AS ENUM ('OWNER', 'ADMIN', 'MEMBER', 'VIEWER');
 
@@ -72,6 +75,7 @@ CREATE TABLE "public"."Issue" (
     "workspaceId" TEXT NOT NULL,
     "columnId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "order" INTEGER NOT NULL DEFAULT 0,
 
     CONSTRAINT "Issue_pkey" PRIMARY KEY ("id")
 );
@@ -138,3 +142,4 @@ ALTER TABLE "public"."Comment" ADD CONSTRAINT "Comment_authorId_fkey" FOREIGN KE
 
 -- AddForeignKey
 ALTER TABLE "public"."AuditLog" ADD CONSTRAINT "AuditLog_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "public"."Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+

@@ -87,6 +87,7 @@ model Issue {
   columnId    String?
   comments    Comment[]
   createdAt   DateTime     @default(now())
+  order       Int          @default(0)
 }
 
 model Comment {

@@ -1,23 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-    DndContext,
-    closestCenter,
-    DragEndEvent,
-    DragOverEvent,
-    MouseSensor,
-    TouchSensor,
-    useSensor,
-    useSensors,
-} from '@dnd-kit/core';
-import {
-    SortableContext,
-    useSortable,
-    arrayMove,
-    rectSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import type React from 'react';
 
 type Issue = {
     id: string;
@@ -29,6 +13,7 @@ type Issue = {
     workspaceId: string;
     columnId?: string | null;
     createdAt: string;
+    order?: number | null;
 };
 
 type Column = {
@@ -49,33 +34,6 @@ type Board = {
 
 const WS = process.env.NEXT_PUBLIC_WORKSPACE_ID;
 
-function IssueCard({ issue }: { issue: Issue }) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-        useSortable({
-            id: issue.id,
-            data: { type: 'issue', issue },
-        });
-
-    const style: React.CSSProperties = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.6 : 1,
-    };
-
-    return (
-        <li
-            ref={setNodeRef}
-            style={style}
-            {...attributes}
-            {...listeners}
-            className="rounded-md border p-3 bg-white"
-        >
-            <div className="text-sm font-medium">{issue.title}</div>
-            <div className="text-xs text-black/50">#{issue.id.slice(0, 6)} • {issue.status}</div>
-        </li>
-    );
-}
-
 export default function KanbanPage() {
     const [board, setBoard] = useState<Board | null>(null);
     const [columns, setColumns] = useState<Column[]>([]);
@@ -86,10 +44,6 @@ export default function KanbanPage() {
     const [newIssueTitleByCol, setNewIssueTitleByCol] = useState<Record<string, string>>({});
 
     const workspaceId = useMemo(() => WS ?? '', []);
-    const sensors = useSensors(
-        useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-        useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } }),
-    );
 
     const load = async () => {
         if (!workspaceId) {
@@ -103,6 +57,7 @@ export default function KanbanPage() {
             const rBoards = await fetch(`/api/boards?workspaceId=${workspaceId}`, { cache: 'no-store' });
             if (!rBoards.ok) throw new Error(`GET /boards ${rBoards.status}`);
             const boards: Board[] = await rBoards.json();
+
             if (!Array.isArray(boards) || boards.length === 0) {
                 setBoard(null);
                 setColumns([]);
@@ -110,13 +65,17 @@ export default function KanbanPage() {
                 setLoading(false);
                 return;
             }
+
             const b = boards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0];
             setBoard(b);
 
             const rCols = await fetch(`/api/columns?boardId=${b.id}`, { cache: 'no-store' });
             if (!rCols.ok) throw new Error(`GET /columns ${rCols.status}`);
             const cols: Column[] = await rCols.json();
+
             cols.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            cols.forEach((c) => c.issues.sort((x, y) => (x.order ?? 0) - (y.order ?? 0)));
+
             setColumns(cols);
         } catch (e: any) {
             setErr(e?.message ?? 'load failed');
@@ -163,87 +122,131 @@ export default function KanbanPage() {
         await load();
     };
 
-    const findColumnByIssueId = (issueId: string) =>
-        columns.find((c) => c.issues.some((i) => i.id === issueId));
-
-    const reorderOnServer = async (columnId: string, issueIds: string[]) => {
-        await fetch(`/api/columns/${columnId}/reorder`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ issueIds }),
-        });
+    const onDragStart = (e: React.DragEvent, issueId: string, fromColumnId: string) => {
+        e.dataTransfer.setData('application/json', JSON.stringify({ issueId, fromColumnId }));
+        e.dataTransfer.effectAllowed = 'move';
     };
 
-    const getTargetColumn = (overId: string | null) => {
-        if (!overId) return null;
-        return (
-            columns.find((c) => c.id === overId) ||
-            columns.find((c) => c.issues.some((i) => i.id === overId)) ||
-            null
-        );
+    const onDragOverColumn = (e: React.DragEvent) => {
+        e.preventDefault();
     };
 
-    const onDragEnd = async (event: DragEndEvent) => {
-        const activeId = String(event.active.id);
-        const overId = event.over ? String(event.over.id) : null;
 
-        const fromCol = findColumnByIssueId(activeId);
-        const toCol = getTargetColumn(overId);
-        if (!fromCol || !toCol) return;
+    const computeDropIndex = (sectionEl: HTMLElement): number => {
+        const ul = sectionEl.querySelector('ul');
+        if (!ul) return 0;
+        const items = Array.from(ul.querySelectorAll('li[data-id]')) as HTMLElement[];
+        if (items.length === 0) return 0;
 
-        const isOverIssue = !!toCol.issues.find((i) => i.id === overId);
-        const toIndex = isOverIssue
-            ? toCol.issues.findIndex((i) => i.id === overId)
-            : toCol.issues.length;
+        const y = (window as any).lastDragOverY as number | undefined;
+        if (typeof y !== 'number') return items.length;
 
-        setColumns((prev) => {
-            const copy = prev.map((c) => ({ ...c, issues: [...c.issues] }));
-            const from = copy.find((c) => c.id === fromCol.id)!;
-            const to = copy.find((c) => c.id === toCol.id)!;
+        let idx = items.length;
+        for (let i = 0; i < items.length; i++) {
+            const rect = items[i].getBoundingClientRect();
+            const mid = rect.top + rect.height / 2;
+            if (y < mid) {
+                idx = i;
+                break;
+            }
+        }
+        return idx;
+    };
 
-            const movingIndex = from.issues.findIndex((i) => i.id === activeId);
-            const [moving] = from.issues.splice(movingIndex, 1);
+    const rememberY = (e: React.DragEvent) => {
+        (window as any).lastDragOverY = e.clientY;
+    };
 
-            if (from.id !== to.id) moving.columnId = to.id;
+    function getDropIndex(section: HTMLElement, y: number) {
+        const items = Array.from(section.querySelectorAll('li[data-id]')) as HTMLElement[];
+        for (let i = 0; i < items.length; i++) {
+            const r = items[i].getBoundingClientRect();
+            if (y < r.top + r.height / 2) return i;
+        }
+        return items.length;
+    }
 
-            const overIndex = toIndex;
-            to.issues.splice(overIndex, 0, moving);
-            return copy;
-        });
+    const onDropToColumn = async (e: React.DragEvent<HTMLElement>, toColumnId: string) => {
+        e.preventDefault();
+
+        const raw =
+            e.dataTransfer.getData('application/json') ||
+            e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+
+        const { issueId, fromColumnId } = JSON.parse(raw) as {
+            issueId: string;
+            fromColumnId: string;
+        };
+
+        const insertIndex = getDropIndex(e.currentTarget as HTMLElement, e.clientY);
+
+        const next = columns.map((c) => ({ ...c, issues: [...c.issues] }));
+        const from = next.find((c) => c.id === fromColumnId);
+        const to = next.find((c) => c.id === toColumnId);
+        if (!from || !to) return;
+
+        const srcIdx = from.issues.findIndex((i) => i.id === issueId);
+        if (srcIdx < 0) return;
+
+        const [moved] = from.issues.splice(srcIdx, 1);
+        moved.columnId = toColumnId;
+
+        let destIdx = Math.max(0, Math.min(insertIndex, to.issues.length));
+        if (fromColumnId === toColumnId && srcIdx < destIdx) destIdx -= 1;
+
+        to.issues.splice(destIdx, 0, moved);
+
+        setColumns(next);
+
+        const toIds = to.issues.map((i) => i.id);
+        const fromIds = from.issues.map((i) => i.id);
 
         try {
-            if (fromCol.id !== toCol.id) {
-                await fetch(`/api/issues/${activeId}`, {
-                    method: 'PATCH',
+            if (fromColumnId === toColumnId) {
+                await fetch(`/api/columns/${toColumnId}/reorder`, {
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ columnId: toCol.id }),
+                    body: JSON.stringify({ issueIds: toIds }),
                 });
-                {
-                    const src = columns.find((c) => c.id === fromCol.id)!;
-                    await reorderOnServer(src.id, src.issues.filter(i => i.id !== activeId).map((i) => i.id));
-                }
-                {
-                    const dst = columns.find((c) => c.id === toCol.id)!;
-                    const ids = [
-                        ...dst.issues.slice(0, toIndex).map((i) => i.id),
-                        activeId,
-                        ...dst.issues.slice(toIndex).map((i) => i.id),
-                    ];
-                    await reorderOnServer(dst.id, ids);
-                }
             } else {
-                const col = columns.find((c) => c.id === toCol.id)!;
-                const fromIndex = col.issues.findIndex((i) => i.id === activeId);
-                const ids = arrayMove(col.issues.map((i) => i.id), fromIndex, toIndex);
-                await reorderOnServer(col.id, ids);
+                await Promise.all([
+                    fetch(`/api/columns/${toColumnId}/reorder`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ issueIds: toIds }),
+                    }),
+                    fetch(`/api/columns/${fromColumnId}/reorder`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ issueIds: fromIds }),
+                    }),
+                ]);
             }
-        } catch (e) {
+
+            await load();
+        } catch (err) {
+            console.error(err);
             await load();
         }
     };
 
+
+    const moveIssue = async (issueId: string, targetColumnId: string) => {
+        const r = await fetch(`/api/issues/${issueId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ columnId: targetColumnId }),
+        });
+        if (!r.ok) {
+            alert(`이슈 이동 실패: ${r.status}`);
+            return;
+        }
+        await load();
+    };
+
     return (
-        <main className="min-h-screen p-6 space-y-6 bg-gray-50 text-gray-900">
+        <main className="min-h-screen p-6 space-y-6">
             <div className="flex items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold">Kanban</h1>
@@ -258,7 +261,10 @@ export default function KanbanPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button onClick={load} className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5">
+                    <button
+                        onClick={load}
+                        className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5"
+                    >
                         Refresh
                     </button>
                 </div>
@@ -267,6 +273,7 @@ export default function KanbanPage() {
             {err && <div className="text-sm text-red-600">{err}</div>}
             {loading && <div className="text-sm opacity-70">Loading…</div>}
 
+            {/* 컬럼 추가 */}
             {board && (
                 <div className="flex items-center gap-2">
                     <input
@@ -275,51 +282,78 @@ export default function KanbanPage() {
                         placeholder="새 컬럼 이름 (예: Todo)"
                         className="border rounded-md px-3 py-1.5 text-sm"
                     />
-                    <button onClick={createColumn} className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5">
+                    <button
+                        onClick={createColumn}
+                        className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5"
+                    >
                         Add Column
                     </button>
                 </div>
             )}
 
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-                <div className="grid gap-4 md:grid-cols-3">
-                    {columns.map((col) => (
-                        <section key={col.id} className="rounded-xl border p-4 bg-white shadow-sm">
-                            <header className="flex items-center justify-between mb-3">
-                                <h2 className="font-semibold">{col.name}</h2>
-                                <span className="text-xs text-black/50">{col.issues.length} cards</span>
-                            </header>
+            {/* 칸반 */}
+            <div className="grid gap-4 md:grid-cols-3">
+                {columns.map((col) => (
+                    <section
+                        key={col.id}
+                        className="rounded-xl border p-4 bg-white"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => onDropToColumn(e, col.id)}
+                    >
+                        <header className="flex items-center justify-between mb-3">
+                            <h2 className="font-semibold">{col.name}</h2>
+                            <span className="text-xs text-black/50">{col.issues.length} cards</span>
+                        </header>
 
-                            {/* 입력 */}
-                            <div className="mb-3 flex items-center gap-2">
-                                <input
-                                    value={newIssueTitleByCol[col.id] ?? ''}
-                                    onChange={(e) =>
-                                        setNewIssueTitleByCol((m) => ({ ...m, [col.id]: e.target.value }))
-                                    }
-                                    placeholder="새 이슈 제목"
-                                    className="border rounded-md px-2 py-1 text-sm flex-1"
-                                />
-                                <button
-                                    onClick={() => createIssue(col.id)}
-                                    className="rounded-md border px-2 py-1 text-sm hover:bg-black/5"
+                        {/* 이슈 추가 */}
+                        <div className="mb-3 flex items-center gap-2">
+                            <input
+                                value={newIssueTitleByCol[col.id] ?? ''}
+                                onChange={(e) =>
+                                    setNewIssueTitleByCol((m) => ({ ...m, [col.id]: e.target.value }))
+                                }
+                                placeholder="새 이슈 제목"
+                                className="border rounded-md px-2 py-1 text-sm flex-1"
+                            />
+                            <button
+                                onClick={() => createIssue(col.id)}
+                                className="rounded-md border px-2 py-1 text-sm hover:bg-black/5"
+                            >
+                                Add
+                            </button>
+                        </div>
+
+                        <ul className="space-y-2">
+                            {col.issues.map((iss) => (
+                                <li
+                                    key={iss.id}
+                                    data-id={iss.id}
+                                    draggable
+                                    onDragStart={(e) => onDragStart(e, iss.id, col.id)}
+                                    className="rounded-md border p-3 bg-white cursor-move"
                                 >
-                                    Add
-                                </button>
-                            </div>
+                                    <div className="text-sm font-medium">{iss.title}</div>
+                                    <div className="text-xs text-black/40 mb-2 capitalize">{iss.status}</div>
 
-                            {/* 정렬 컨텍스트: 이 컬럼의 이슈들 */}
-                            <SortableContext items={col.issues.map((i) => i.id)} strategy={rectSortingStrategy}>
-                                <ul className="space-y-2 min-h-[40px]" id={col.id}>
-                                    {col.issues.map((iss) => (
-                                        <IssueCard key={iss.id} issue={iss} />
-                                    ))}
-                                </ul>
-                            </SortableContext>
-                        </section>
-                    ))}
-                </div>
-            </DndContext>
+                                    {/* 백업 이동 UI(드롭다운) */}
+                                    <label className="text-xs text-black/60 mr-2">Move to:</label>
+                                    <select
+                                        defaultValue={col.id}
+                                        onChange={(e) => moveIssue(iss.id, e.target.value)}
+                                        className="border rounded px-2 py-1 text-xs"
+                                    >
+                                        {columns.map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                ))}
+            </div>
         </main>
     );
 }
