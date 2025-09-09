@@ -65,15 +65,25 @@ turbo.json
 - **NestJS: 모듈 구조/DI로 확장성과 테스트 용이성 확보**
 
 ## 트러블슈팅
-- **포트 충돌 → infra/docker-compose.yml/main.ts에서 포트 조정**
-- **Prisma 오류 → pnpm prisma format && pnpm prisma validate**
-- **/api/* 404 →** `apps/web/next.config.ts` 저장 후 프론트 dev 서버 재시작**
-- `ECONNREFUSED /api/*` → API(3001) 꺼짐. `pnpm -C apps/api dev` 로 기동/로그 확인
-- `Prisma P1001` → DB 접속 실패. Docker 컨테이너 상태 확인, `.env`의 호스트를 `127.0.0.1:5432` 로
-  
-## 로드맵
-- [ ] 보드/이슈 도메인 설계 문서 공개
-- [ ] 칸반 UI + 낙관적 업데이트
-- [ ] 인증/조직 권한 모델
-- [ ] 감사 로그/웹소켓 알림
-- [ ] GitHub Actions로 CI, 배포 파이프라인
+- **포트 충돌 → infra/docker-compose.yml/main.ts에서 포트 조정 (1H)**
+- **Prisma 오류 → pnpm prisma format && pnpm prisma validate (1H)**
+- **Kanban Drag & Drop 후 새로고침 시 순서가 되돌아가는 문제 (2일 소요)**
+  1) 증상
+    - 카드 순서를 바꿔도 새로고침하면 원래대로 복귀
+    - 컬럼 간 이동도 새로고침 시 원복
+    - `/columns/:id/reorder`는 200인데 UI가 반영되지 않음
+  2) 원인
+    - 프론트에서 setState 직후의 상태에 의존해 서버로 순서 배열을 보내면,
+      React 배칭/비동기 타이밍에 따라 잘못된 배열이 전송될 수 있음.
+    - 즉, 드롭 결과를 로컬 스냅샷으로 확정한 뒤 그 스냅샷 기반으로 reorder 호출해야 함
+  3) 해결 (Web)
+    - drop 시 **현재 columns의 deep copy로 'next' 스냅샷** 생성
+    - 스냅샷에서 from/to 배열을 직접 수정해 최종 순서를 확정
+    - `setColumns(next)`로 즉시 UI 반영
+    - 스냅샷에서 만든 `toIds`/`fromIds`로 `/columns/:id/reorder` 호출
+    - 성공/실패 모두 `load()`로 DB 상태 재동기화
+    - 같은 컬럼 내에서는 `srcIdx < destIdx`면 `destIdx -= 1` 보정
+  4) 해결 (API)
+    - `ColumnsService.findMany`: issues 정렬 `order ASC, createdAt ASC`
+    - `ColumnsService.reorder`: 전달된 `issueIds` 검증 후, 트랜잭션으로 `columnId`와 `order` 동시 갱신
+    - `IssuesService.update`: 컬럼 변경 시 대상 컬럼의 다음 `order` 자동 부여
