@@ -67,7 +67,7 @@ turbo.json
 ## 트러블슈팅
 - **포트 충돌 → infra/docker-compose.yml/main.ts에서 포트 조정 (1H)**
 - **Prisma 오류 → pnpm prisma format && pnpm prisma validate (1H)**
-- **Kanban Drag & Drop 후 새로고침 시 순서가 되돌아가는 문제 (2일 소요)**
+- **Kanban Drag & Drop 후 새로고침 시 순서가 되돌아가는 문제 (2 Days)**
   1) 증상
     - 카드 순서를 바꿔도 새로고침하면 원래대로 복귀
     - 컬럼 간 이동도 새로고침 시 원복
