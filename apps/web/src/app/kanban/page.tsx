@@ -33,6 +33,8 @@ type Board = {
 };
 
 const WS = process.env.NEXT_PUBLIC_WORKSPACE_ID;
+const API = process.env.NEXT_PUBLIC_API_BASE || '';
+const COL_TOKEN = '__COLUMN__:';
 
 export default function KanbanPage() {
     const [board, setBoard] = useState<Board | null>(null);
@@ -54,7 +56,7 @@ export default function KanbanPage() {
         setLoading(true);
         setErr(null);
         try {
-            const rBoards = await fetch(`/api/boards?workspaceId=${workspaceId}`, { cache: 'no-store' });
+            const rBoards = await fetch(`${API}/boards?workspaceId=${workspaceId}`, { cache: 'no-store' });
             if (!rBoards.ok) throw new Error(`GET /boards ${rBoards.status}`);
             const boards: Board[] = await rBoards.json();
 
@@ -69,7 +71,7 @@ export default function KanbanPage() {
             const b = boards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0];
             setBoard(b);
 
-            const rCols = await fetch(`/api/columns?boardId=${b.id}`, { cache: 'no-store' });
+            const rCols = await fetch(`${API}/columns?boardId=${b.id}`, { cache: 'no-store' });
             if (!rCols.ok) throw new Error(`GET /columns ${rCols.status}`);
             const cols: Column[] = await rCols.json();
 
@@ -92,7 +94,7 @@ export default function KanbanPage() {
         if (!board) return;
         if (!newColumn.trim()) return;
         const body = { name: newColumn.trim(), boardId: board.id, order: columns.length };
-        const r = await fetch('/api/columns', {
+        const r = await fetch(`${API}/columns`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -109,7 +111,7 @@ export default function KanbanPage() {
         const title = (newIssueTitleByCol[columnId] ?? '').trim();
         if (!title || !workspaceId) return;
         const body = { title, workspaceId, columnId };
-        const r = await fetch('/api/issues', {
+        const r = await fetch(`${API}/issues`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -123,38 +125,9 @@ export default function KanbanPage() {
     };
 
     const onDragStart = (e: React.DragEvent, issueId: string, fromColumnId: string) => {
+        e.stopPropagation();
         e.dataTransfer.setData('application/json', JSON.stringify({ issueId, fromColumnId }));
         e.dataTransfer.effectAllowed = 'move';
-    };
-
-    const onDragOverColumn = (e: React.DragEvent) => {
-        e.preventDefault();
-    };
-
-
-    const computeDropIndex = (sectionEl: HTMLElement): number => {
-        const ul = sectionEl.querySelector('ul');
-        if (!ul) return 0;
-        const items = Array.from(ul.querySelectorAll('li[data-id]')) as HTMLElement[];
-        if (items.length === 0) return 0;
-
-        const y = (window as any).lastDragOverY as number | undefined;
-        if (typeof y !== 'number') return items.length;
-
-        let idx = items.length;
-        for (let i = 0; i < items.length; i++) {
-            const rect = items[i].getBoundingClientRect();
-            const mid = rect.top + rect.height / 2;
-            if (y < mid) {
-                idx = i;
-                break;
-            }
-        }
-        return idx;
-    };
-
-    const rememberY = (e: React.DragEvent) => {
-        (window as any).lastDragOverY = e.clientY;
     };
 
     function getDropIndex(section: HTMLElement, y: number) {
@@ -167,18 +140,24 @@ export default function KanbanPage() {
     }
 
     const onDropToColumn = async (e: React.DragEvent<HTMLElement>, toColumnId: string) => {
-        e.preventDefault();
+        const token = e.dataTransfer.getData('text/column') || e.dataTransfer.getData('text/plain');
+        if (token && (token.startsWith(COL_TOKEN) || columns.some((c) => c.id === token))) return;
 
-        const raw =
-            e.dataTransfer.getData('application/json') ||
-            e.dataTransfer.getData('text/plain');
+        e.preventDefault();
+        e.stopPropagation();
+
+        const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
         if (!raw) return;
 
-        const { issueId, fromColumnId } = JSON.parse(raw) as {
-            issueId: string;
-            fromColumnId: string;
-        };
+        let payload: { issueId: string; fromColumnId: string } | null = null;
+        try {
+            payload = JSON.parse(raw);
+        } catch {
+            return;
+        }
+        if (!payload) return;
 
+        const { issueId, fromColumnId } = payload;
         const insertIndex = getDropIndex(e.currentTarget as HTMLElement, e.clientY);
 
         const next = columns.map((c) => ({ ...c, issues: [...c.issues] }));
@@ -204,36 +183,33 @@ export default function KanbanPage() {
 
         try {
             if (fromColumnId === toColumnId) {
-                await fetch(`/api/columns/${toColumnId}/reorder`, {
+                await fetch(`${API}/columns/${toColumnId}/reorder`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ issueIds: toIds }),
                 });
             } else {
                 await Promise.all([
-                    fetch(`/api/columns/${toColumnId}/reorder`, {
+                    fetch(`${API}/columns/${toColumnId}/reorder`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ issueIds: toIds }),
                     }),
-                    fetch(`/api/columns/${fromColumnId}/reorder`, {
+                    fetch(`${API}/columns/${fromColumnId}/reorder`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ issueIds: fromIds }),
                     }),
                 ]);
             }
-
             await load();
-        } catch (err) {
-            console.error(err);
+        } catch {
             await load();
         }
     };
 
-
     const moveIssue = async (issueId: string, targetColumnId: string) => {
-        const r = await fetch(`/api/issues/${issueId}`, {
+        const r = await fetch(`${API}/issues/${issueId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ columnId: targetColumnId }),
@@ -243,6 +219,70 @@ export default function KanbanPage() {
             return;
         }
         await load();
+    };
+
+    function getColumnDropIndex(container: HTMLElement, x: number) {
+        const sections = Array.from(container.querySelectorAll('section[data-col-id]')) as HTMLElement[];
+        for (let i = 0; i < sections.length; i++) {
+            const r = sections[i].getBoundingClientRect();
+            if (x < r.left + r.width / 2) return i;
+        }
+        return sections.length;
+    }
+
+    const onColDragStart = (e: React.DragEvent, columnId: string) => {
+        e.stopPropagation();
+        e.dataTransfer.setData('text/column', columnId);
+        e.dataTransfer.setData('text/plain', `${COL_TOKEN}${columnId}`);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const onColDrop = async (e: React.DragEvent<HTMLElement>) => {
+        e.preventDefault();
+        if (!board) return;
+
+        const token = e.dataTransfer.getData('text/column') || e.dataTransfer.getData('text/plain');
+        if (!token) return;
+
+        const fromColumnId = token.startsWith(COL_TOKEN) ? token.slice(COL_TOKEN.length) : token;
+        const wrap = e.currentTarget as HTMLElement;
+        const insertIndex = getColumnDropIndex(wrap, e.clientX);
+
+        const after = columns.map((c) => ({ ...c, issues: [...c.issues] }));
+        const srcIdx = after.findIndex((c) => c.id === fromColumnId);
+        if (srcIdx < 0) {
+            alert('드래그한 컬럼을 찾지 못했습니다.');
+            return;
+        }
+        const [moved] = after.splice(srcIdx, 1);
+        let destIdx = Math.max(0, Math.min(insertIndex, after.length));
+        if (srcIdx < destIdx) destIdx -= 1;
+        after.splice(destIdx, 0, moved);
+
+        setColumns(after);
+
+        const columnIds = after.map((c) => c.id);
+        if (!columnIds.length) {
+            alert('컬럼 재정렬 payload가 비어있어요.');
+            return;
+        }
+
+        try {
+            const r = await fetch(`${API}/columns/reorder`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ boardId: board.id, columnIds }),
+            });
+            if (!r.ok) {
+                const msg = await r.text().catch(() => '');
+                alert(`컬럼 재정렬 실패: ${r.status}\n${msg}`);
+                return;
+            }
+            await load();
+        } catch {
+            alert('컬럼 재정렬 호출 중 오류가 발생했습니다.');
+            await load();
+        }
     };
 
     return (
@@ -261,10 +301,7 @@ export default function KanbanPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={load}
-                        className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5"
-                    >
+                    <button onClick={load} className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5">
                         Refresh
                     </button>
                 </div>
@@ -273,7 +310,6 @@ export default function KanbanPage() {
             {err && <div className="text-sm text-red-600">{err}</div>}
             {loading && <div className="text-sm opacity-70">Loading…</div>}
 
-            {/* 컬럼 추가 */}
             {board && (
                 <div className="flex items-center gap-2">
                     <input
@@ -282,43 +318,56 @@ export default function KanbanPage() {
                         placeholder="새 컬럼 이름 (예: Todo)"
                         className="border rounded-md px-3 py-1.5 text-sm"
                     />
-                    <button
-                        onClick={createColumn}
-                        className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5"
-                    >
+                    <button onClick={createColumn} className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5">
                         Add Column
                     </button>
                 </div>
             )}
 
-            {/* 칸반 */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div
+                className="grid gap-4 md:grid-cols-3"
+                data-columns-wrap
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={onColDrop}
+            >
                 {columns.map((col) => (
                     <section
                         key={col.id}
+                        data-col-id={col.id}
                         className="rounded-xl border p-4 bg-white"
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => onDropToColumn(e, col.id)}
+                        draggable
+                        onDragStart={(e) => onColDragStart(e, col.id)}
                     >
-                        <header className="flex items-center justify-between mb-3">
+                        <header
+                            className="flex items-center justify-between mb-3 cursor-grab active:cursor-grabbing"
+                            draggable
+                            onDragStart={(e) => onColDragStart(e, col.id)}
+                        >
                             <h2 className="font-semibold">{col.name}</h2>
-                            <span className="text-xs text-black/50">{col.issues.length} cards</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-black/50">{col.issues.length} cards</span>
+                                <span
+                                    draggable
+                                    onDragStart={(e) => onColDragStart(e, col.id)}
+                                    title="Drag column"
+                                    className="cursor-move text-xs text-black/40 border rounded px-2 py-0.5"
+                                />
+                            </div>
                         </header>
 
-                        {/* 이슈 추가 */}
                         <div className="mb-3 flex items-center gap-2">
                             <input
                                 value={newIssueTitleByCol[col.id] ?? ''}
-                                onChange={(e) =>
-                                    setNewIssueTitleByCol((m) => ({ ...m, [col.id]: e.target.value }))
-                                }
+                                onChange={(e) => setNewIssueTitleByCol((m) => ({ ...m, [col.id]: e.target.value }))}
                                 placeholder="새 이슈 제목"
                                 className="border rounded-md px-2 py-1 text-sm flex-1"
                             />
-                            <button
-                                onClick={() => createIssue(col.id)}
-                                className="rounded-md border px-2 py-1 text-sm hover:bg-black/5"
-                            >
+                            <button onClick={() => createIssue(col.id)} className="rounded-md border px-2 py-1 text-sm hover:bg-black/5">
                                 Add
                             </button>
                         </div>
@@ -334,8 +383,6 @@ export default function KanbanPage() {
                                 >
                                     <div className="text-sm font-medium">{iss.title}</div>
                                     <div className="text-xs text-black/40 mb-2 capitalize">{iss.status}</div>
-
-                                    {/* 백업 이동 UI(드롭다운) */}
                                     <label className="text-xs text-black/60 mr-2">Move to:</label>
                                     <select
                                         defaultValue={col.id}

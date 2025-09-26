@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateColumnDto } from './dto/create-column.dto';
 import { UpdateColumnDto } from './dto/update-column.dto';
+
 
 @Injectable()
 export class ColumnsService {
@@ -74,5 +75,31 @@ export class ColumnsService {
         );
 
         return {ok: true};
+    }
+
+    async reorderColumns(boardId: string, columnIds: string[]) {
+        if (!boardId) throw new BadRequestException('boardId is required');
+        if (!Array.isArray(columnIds) || columnIds.length === 0) {
+            throw new BadRequestException('columnIds is required');
+        }
+
+        const found = await this.prisma.boardColumn.findMany({
+            where: { id: { in: columnIds }, boardId },
+            select: { id: true },
+        });
+        if (found.length !== columnIds.length) {
+            throw new NotFoundException('Some columns not found in this board');
+        }
+
+        await this.prisma.$transaction(
+            columnIds.map((id, idx) =>
+                this.prisma.boardColumn.update({
+                    where: { id },
+                    data: { order: idx },
+                }),
+            ),
+        );
+
+        return { ok: true };
     }
 }
