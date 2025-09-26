@@ -33,7 +33,6 @@ type Board = {
 };
 
 const WS = process.env.NEXT_PUBLIC_WORKSPACE_ID;
-const API = process.env.NEXT_PUBLIC_API_BASE || '';
 const COL_TOKEN = '__COLUMN__:';
 
 export default function KanbanPage() {
@@ -44,40 +43,38 @@ export default function KanbanPage() {
 
     const [newColumn, setNewColumn] = useState('');
     const [newIssueTitleByCol, setNewIssueTitleByCol] = useState<Record<string, string>>({});
+    const [editingColumn, setEditingColumn] = useState<{ id: string; name: string } | null>(null);
+    const [editingIssue, setEditingIssue] = useState<{ id: string; title: string; colId: string } | null>(null);
 
     const workspaceId = useMemo(() => WS ?? '', []);
 
     const load = async () => {
         if (!workspaceId) {
-            setErr('환경변수 NEXT_PUBLIC_WORKSPACE_ID가 비어있어요.');
+            setErr('NEXT_PUBLIC_WORKSPACE_ID is empty.');
             setLoading(false);
             return;
         }
         setLoading(true);
         setErr(null);
         try {
-            const rBoards = await fetch(`${API}/boards?workspaceId=${workspaceId}`, { cache: 'no-store' });
+            const rBoards = await fetch(`/api/boards?workspaceId=${workspaceId}`, { cache: 'no-store' });
             if (!rBoards.ok) throw new Error(`GET /boards ${rBoards.status}`);
             const boards: Board[] = await rBoards.json();
-
             if (!Array.isArray(boards) || boards.length === 0) {
                 setBoard(null);
                 setColumns([]);
-                setErr('이 워크스페이스에 보드가 없습니다. 먼저 보드를 생성하세요.');
+                setErr('No board. Create one first.');
                 setLoading(false);
                 return;
             }
-
             const b = boards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0];
             setBoard(b);
 
-            const rCols = await fetch(`${API}/columns?boardId=${b.id}`, { cache: 'no-store' });
+            const rCols = await fetch(`/api/columns?boardId=${b.id}`, { cache: 'no-store' });
             if (!rCols.ok) throw new Error(`GET /columns ${rCols.status}`);
             const cols: Column[] = await rCols.json();
-
             cols.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             cols.forEach((c) => c.issues.sort((x, y) => (x.order ?? 0) - (y.order ?? 0)));
-
             setColumns(cols);
         } catch (e: any) {
             setErr(e?.message ?? 'load failed');
@@ -94,13 +91,13 @@ export default function KanbanPage() {
         if (!board) return;
         if (!newColumn.trim()) return;
         const body = { name: newColumn.trim(), boardId: board.id, order: columns.length };
-        const r = await fetch(`${API}/columns`, {
+        const r = await fetch('/api/columns', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
         if (!r.ok) {
-            alert(`컬럼 생성 실패: ${r.status}`);
+            alert(`Create column failed: ${r.status}`);
             return;
         }
         setNewColumn('');
@@ -111,13 +108,13 @@ export default function KanbanPage() {
         const title = (newIssueTitleByCol[columnId] ?? '').trim();
         if (!title || !workspaceId) return;
         const body = { title, workspaceId, columnId };
-        const r = await fetch(`${API}/issues`, {
+        const r = await fetch('/api/issues', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
         if (!r.ok) {
-            alert(`이슈 생성 실패: ${r.status}`);
+            alert(`Create issue failed: ${r.status}`);
             return;
         }
         setNewIssueTitleByCol((m) => ({ ...m, [columnId]: '' }));
@@ -175,7 +172,6 @@ export default function KanbanPage() {
         if (fromColumnId === toColumnId && srcIdx < destIdx) destIdx -= 1;
 
         to.issues.splice(destIdx, 0, moved);
-
         setColumns(next);
 
         const toIds = to.issues.map((i) => i.id);
@@ -183,19 +179,19 @@ export default function KanbanPage() {
 
         try {
             if (fromColumnId === toColumnId) {
-                await fetch(`${API}/columns/${toColumnId}/reorder`, {
+                await fetch(`/api/columns/${toColumnId}/reorder`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ issueIds: toIds }),
                 });
             } else {
                 await Promise.all([
-                    fetch(`${API}/columns/${toColumnId}/reorder`, {
+                    fetch(`/api/columns/${toColumnId}/reorder`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ issueIds: toIds }),
                     }),
-                    fetch(`${API}/columns/${fromColumnId}/reorder`, {
+                    fetch(`/api/columns/${fromColumnId}/reorder`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ issueIds: fromIds }),
@@ -209,13 +205,13 @@ export default function KanbanPage() {
     };
 
     const moveIssue = async (issueId: string, targetColumnId: string) => {
-        const r = await fetch(`${API}/issues/${issueId}`, {
+        const r = await fetch(`/api/issues/${issueId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ columnId: targetColumnId }),
         });
         if (!r.ok) {
-            alert(`이슈 이동 실패: ${r.status}`);
+            alert(`Move issue failed: ${r.status}`);
             return;
         }
         await load();
@@ -239,50 +235,86 @@ export default function KanbanPage() {
 
     const onColDrop = async (e: React.DragEvent<HTMLElement>) => {
         e.preventDefault();
+        e.stopPropagation();
         if (!board) return;
 
         const token = e.dataTransfer.getData('text/column') || e.dataTransfer.getData('text/plain');
         if (!token) return;
-
         const fromColumnId = token.startsWith(COL_TOKEN) ? token.slice(COL_TOKEN.length) : token;
+
         const wrap = e.currentTarget as HTMLElement;
         const insertIndex = getColumnDropIndex(wrap, e.clientX);
+        const next = columns.map((c) => ({ ...c, issues: [...c.issues] }));
+        const srcIdx = next.findIndex((c) => c.id === fromColumnId);
+        if (srcIdx < 0) return;
 
-        const after = columns.map((c) => ({ ...c, issues: [...c.issues] }));
-        const srcIdx = after.findIndex((c) => c.id === fromColumnId);
-        if (srcIdx < 0) {
-            alert('드래그한 컬럼을 찾지 못했습니다.');
-            return;
-        }
-        const [moved] = after.splice(srcIdx, 1);
-        let destIdx = Math.max(0, Math.min(insertIndex, after.length));
+        const [moved] = next.splice(srcIdx, 1);
+        let destIdx = Math.max(0, Math.min(insertIndex, next.length));
         if (srcIdx < destIdx) destIdx -= 1;
-        after.splice(destIdx, 0, moved);
-
-        setColumns(after);
-
-        const columnIds = after.map((c) => c.id);
-        if (!columnIds.length) {
-            alert('컬럼 재정렬 payload가 비어있어요.');
-            return;
-        }
+        next.splice(destIdx, 0, moved);
+        setColumns(next);
 
         try {
-            const r = await fetch(`${API}/columns/reorder`, {
+            const columnIds = next.map((c) => c.id);
+            await fetch('/api/columns/reorder', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ boardId: board.id, columnIds }),
             });
-            if (!r.ok) {
-                const msg = await r.text().catch(() => '');
-                alert(`컬럼 재정렬 실패: ${r.status}\n${msg}`);
-                return;
-            }
             await load();
-        } catch {
-            alert('컬럼 재정렬 호출 중 오류가 발생했습니다.');
+        } catch (err) {
+            console.error('[columns/reorder] failed', err);
+            alert('컬럼 재정렬 실패');
             await load();
         }
+    };
+
+    const patchColumn = async (id: string, name: string) => {
+        const r = await fetch(`/api/columns/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        if (!r.ok) {
+            alert(`Update column failed: ${r.status}`);
+            return;
+        }
+        setEditingColumn(null);
+        await load();
+    };
+
+    const deleteColumn = async (id: string) => {
+        if (!confirm('Delete this column?')) return;
+        const r = await fetch(`/api/columns/${id}`, { method: 'DELETE' });
+        if (!r.ok) {
+            alert(`Delete column failed: ${r.status}`);
+            return;
+        }
+        await load();
+    };
+
+    const patchIssue = async (id: string, title: string) => {
+        const r = await fetch(`/api/issues/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title }),
+        });
+        if (!r.ok) {
+            alert(`Update issue failed: ${r.status}`);
+            return;
+        }
+        setEditingIssue(null);
+        await load();
+    };
+
+    const deleteIssue = async (id: string) => {
+        if (!confirm('Delete this issue?')) return;
+        const r = await fetch(`/api/issues/${id}`, { method: 'DELETE' });
+        if (!r.ok) {
+            alert(`Delete issue failed: ${r.status}`);
+            return;
+        }
+        await load();
     };
 
     return (
@@ -315,7 +347,7 @@ export default function KanbanPage() {
                     <input
                         value={newColumn}
                         onChange={(e) => setNewColumn(e.target.value)}
-                        placeholder="새 컬럼 이름 (예: Todo)"
+                        placeholder="New column"
                         className="border rounded-md px-3 py-1.5 text-sm"
                     />
                     <button onClick={createColumn} className="rounded-md border px-3 py-1.5 text-sm hover:bg-black/5">
@@ -340,23 +372,49 @@ export default function KanbanPage() {
                         className="rounded-xl border p-4 bg-white"
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => onDropToColumn(e, col.id)}
-                        draggable
-                        onDragStart={(e) => onColDragStart(e, col.id)}
                     >
-                        <header
-                            className="flex items-center justify-between mb-3 cursor-grab active:cursor-grabbing"
-                            draggable
-                            onDragStart={(e) => onColDragStart(e, col.id)}
-                        >
-                            <h2 className="font-semibold">{col.name}</h2>
+                        <header className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                {editingColumn?.id === col.id ? (
+                                    <>
+                                        <input
+                                            value={editingColumn.name}
+                                            onChange={(e) => setEditingColumn({ id: col.id, name: e.target.value })}
+                                            className="border rounded px-2 py-1 text-sm"
+                                        />
+                                        <button
+                                            className="border rounded px-2 py-1 text-xs"
+                                            onClick={() => patchColumn(col.id, editingColumn.name.trim())}
+                                        >
+                                            Save
+                                        </button>
+                                        <button className="border rounded px-2 py-1 text-xs" onClick={() => setEditingColumn(null)}>
+                                            Cancel
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <h2
+                                            className="font-semibold cursor-grab active:cursor-grabbing"
+                                            draggable
+                                            onDragStart={(e) => onColDragStart(e, col.id)}
+                                        >
+                                            {col.name}
+                                        </h2>
+                                        <button
+                                            className="border rounded px-2 py-1 text-xs"
+                                            onClick={() => setEditingColumn({ id: col.id, name: col.name })}
+                                        >
+                                            Rename
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-xs text-black/50">{col.issues.length} cards</span>
-                                <span
-                                    draggable
-                                    onDragStart={(e) => onColDragStart(e, col.id)}
-                                    title="Drag column"
-                                    className="cursor-move text-xs text-black/40 border rounded px-2 py-0.5"
-                                />
+                                <button className="border rounded px-2 py-1 text-xs" onClick={() => deleteColumn(col.id)}>
+                                    Delete
+                                </button>
                             </div>
                         </header>
 
@@ -364,7 +422,7 @@ export default function KanbanPage() {
                             <input
                                 value={newIssueTitleByCol[col.id] ?? ''}
                                 onChange={(e) => setNewIssueTitleByCol((m) => ({ ...m, [col.id]: e.target.value }))}
-                                placeholder="새 이슈 제목"
+                                placeholder="New issue"
                                 className="border rounded-md px-2 py-1 text-sm flex-1"
                             />
                             <button onClick={() => createIssue(col.id)} className="rounded-md border px-2 py-1 text-sm hover:bg-black/5">
@@ -373,30 +431,67 @@ export default function KanbanPage() {
                         </div>
 
                         <ul className="space-y-2">
-                            {col.issues.map((iss) => (
-                                <li
-                                    key={iss.id}
-                                    data-id={iss.id}
-                                    draggable
-                                    onDragStart={(e) => onDragStart(e, iss.id, col.id)}
-                                    className="rounded-md border p-3 bg-white cursor-move"
-                                >
-                                    <div className="text-sm font-medium">{iss.title}</div>
-                                    <div className="text-xs text-black/40 mb-2 capitalize">{iss.status}</div>
-                                    <label className="text-xs text-black/60 mr-2">Move to:</label>
-                                    <select
-                                        defaultValue={col.id}
-                                        onChange={(e) => moveIssue(iss.id, e.target.value)}
-                                        className="border rounded px-2 py-1 text-xs"
+                            {col.issues.map((iss) => {
+                                const label = columns.find((c) => c.id === (iss.columnId ?? col.id))?.name ?? col.name;
+                                return (
+                                    <li
+                                        key={iss.id}
+                                        data-id={iss.id}
+                                        draggable
+                                        onDragStart={(e) => onDragStart(e, iss.id, col.id)}
+                                        className="rounded-md border p-3 bg-white"
                                     >
-                                        {columns.map((c) => (
-                                            <option key={c.id} value={c.id}>
-                                                {c.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </li>
-                            ))}
+                                        {editingIssue?.id === iss.id ? (
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    value={editingIssue.title}
+                                                    onChange={(e) => setEditingIssue({ id: iss.id, title: e.target.value, colId: col.id })}
+                                                    className="border rounded px-2 py-1 text-sm flex-1"
+                                                />
+                                                <button
+                                                    className="border rounded px-2 py-1 text-xs"
+                                                    onClick={() => patchIssue(iss.id, editingIssue.title.trim())}
+                                                >
+                                                    Save
+                                                </button>
+                                                <button className="border rounded px-2 py-1 text-xs" onClick={() => setEditingIssue(null)}>
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-medium truncate">{iss.title}</div>
+                                                    <div className="text-xs text-black/40 mb-2">{label}</div>
+                                                    <label className="text-xs text-black/60 mr-2">Move to:</label>
+                                                    <select
+                                                        defaultValue={col.id}
+                                                        onChange={(e) => moveIssue(iss.id, e.target.value)}
+                                                        className="border rounded px-2 py-1 text-xs"
+                                                    >
+                                                        {columns.map((c) => (
+                                                            <option key={c.id} value={c.id}>
+                                                                {c.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <button
+                                                        className="border rounded px-2 py-1 text-xs"
+                                                        onClick={() => setEditingIssue({ id: iss.id, title: iss.title, colId: col.id })}
+                                                    >
+                                                        Rename
+                                                    </button>
+                                                    <button className="border rounded px-2 py-1 text-xs" onClick={() => deleteIssue(iss.id)}>
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </section>
                 ))}
