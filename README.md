@@ -5,9 +5,12 @@
 - [x] Dockerized PostgreSQL 16 / Redis 7
 - [x] Prisma schema & migrations
 - [x] Health checks: /health, /health/db
-- [x] Kanban Drag & Drop
- - Issues: reorder within a column and move across columns
- - Columns: horizontal drag & drop (reorder)
+- [x] Kanban board
+ - Drag & drop cards within/between columns
+ - Horizontal column drag & drop
+ - Create / Rename / Delete columns
+ - Create / Rename / Delete issues
+ - Deterministic ordering persisted in DB
 - [x] Boards/Columns/Issues CRUD (NestJS + Prisma)
 - [x] Frontend API integration (App Router) and health dashboard
 - [ ] Auth (email/social), org/workspace permissions
