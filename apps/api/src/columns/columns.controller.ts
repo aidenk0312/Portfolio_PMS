@@ -28,7 +28,12 @@ export class ColumnsController {
     }
 
     @Post(':id/reorder')
-    reorder(@Param('id') id: string, @Body() body: { issueIds: string[] }) {
-        return this.columnsService.reorder(id, body);
+    reorderIssues(@Param('id') columnId: string, @Body() dto: { issueIds: string[] }) {
+        return this.columnsService.reorder(columnId, dto);
+    }
+
+    @Post('reorder')
+    reorderColumns(@Body() dto: { boardId: string; columnIds: string[] }) {
+        return this.columnsService.reorderColumns(dto.boardId, dto.columnIds);
     }
 }
