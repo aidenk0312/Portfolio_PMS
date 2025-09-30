@@ -1,4 +1,5 @@
-import { Controller, Get, Query, Param, Post, Body, Patch, Delete } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { BoardsService } from './boards.service';
 import { CreateBoardDto } from './dto/create-board.dto';
 import { UpdateBoardDto } from './dto/update-board.dto';
@@ -17,6 +18,11 @@ export class BoardsController {
         return this.boards.findOne(id);
     }
 
+    @Get(':id/full')
+    getBoardFull(@Param('id') id: string) {
+        return this.boards.getBoardFull(id);
+    }
+
     @Post()
     create(@Body() dto: CreateBoardDto) {
         return this.boards.create(dto);
@@ -28,7 +34,8 @@ export class BoardsController {
     }
 
     @Delete(':id')
-    remove(@Param('id') id: string) {
-        return this.boards.remove(id);
+    async deleteBoard(@Param('id') id: string, @Query('cascade') cascade: string | undefined, @Res() res: Response): Promise<void> {
+        await this.boards.deleteBoard(id, cascade === 'true');
+        res.status(HttpStatus.NO_CONTENT).send();
     }
 }

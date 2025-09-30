@@ -1,28 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
+import {Prisma} from "@prisma/client";
 
 @Injectable()
 export class IssuesService {
-    constructor(private prisma: PrismaService) {}
+    constructor(private prisma: PrismaService) {
+    }
 
     private async getNextOrder(columnId?: string | null) {
         if (!columnId) return 0;
-        const count = await this.prisma.issue.count({ where: { columnId } });
+        const count = await this.prisma.issue.count({where: {columnId}});
         return count;
     }
 
     findMany(params: { workspaceId?: string; columnId?: string }) {
-        const { workspaceId, columnId } = params;
+        const {workspaceId, columnId} = params;
         return this.prisma.issue.findMany({
             where: {
                 workspaceId: workspaceId || undefined,
                 columnId: columnId || undefined,
             },
             orderBy: [
-                { order: 'asc' },
-                { createdAt: 'asc' },
+                {order: 'asc'},
+                {createdAt: 'asc'},
             ],
             include: {
                 assignee: true,
@@ -36,7 +38,7 @@ export class IssuesService {
 
         if (dto.columnId) {
             const count = await this.prisma.issue.count({
-                where: { columnId: dto.columnId },
+                where: {columnId: dto.columnId},
             });
             nextOrder = count;
         }
@@ -67,8 +69,8 @@ export class IssuesService {
 
         if (dto.columnId !== undefined) {
             const current = await this.prisma.issue.findUnique({
-                where: { id },
-                select: { columnId: true },
+                where: {id},
+                select: {columnId: true},
             });
 
             if (current?.columnId !== dto.columnId) {
@@ -80,12 +82,33 @@ export class IssuesService {
         }
 
         return this.prisma.issue.update({
-            where: { id },
+            where: {id},
             data,
         });
     }
 
-    remove(id: string) {
-        return this.prisma.issue.delete({ where: { id } });
+    async remove(id: string): Promise<void> {
+        try {
+            await this.prisma.issue.delete({ where: { id } });
+        } catch (e: any) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+                throw new NotFoundException('ISSUE_NOT_FOUND');
+            }
+            throw e;
+        }
+    }
+
+    async deleteIssue(id: string) {
+        const target = await this.prisma.issue.findUnique({where: {id}});
+        if (!target) throw new NotFoundException('ISSUE_NOT_FOUND');
+        await this.prisma.$transaction(async (tx) => {
+            await tx.issue.delete({where: {id}});
+            if (target.columnId) {
+                await tx.issue.updateMany({
+                    where: {columnId: target.columnId, order: {gt: target.order}},
+                    data: {order: {decrement: 1}},
+                });
+            }
+        });
     }
 }

@@ -1,11 +1,13 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
+import { IsCuid } from '../../common/validators/is-cuid.validator';
 
 export class CreateBoardDto {
     @IsString()
-    @MinLength(1)
+    @IsNotEmpty()
     name!: string;
 
     @IsString()
-    @MinLength(1)
+    @IsNotEmpty()
+    @IsCuid()
     workspaceId!: string;
 }

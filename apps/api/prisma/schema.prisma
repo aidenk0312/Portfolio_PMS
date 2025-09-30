@@ -68,7 +68,7 @@ model BoardColumn {
   id      String  @id @default(cuid())
   name    String
   order   Int     @default(0)
-  board   Board   @relation(fields: [boardId], references: [id])
+  board   Board   @relation(fields: [boardId], references: [id], onDelete: Restrict)
   boardId String
   issues  Issue[]
 }
@@ -83,7 +83,7 @@ model Issue {
   dueAt       DateTime?
   workspace   Workspace    @relation(fields: [workspaceId], references: [id])
   workspaceId String
-  column      BoardColumn? @relation(fields: [columnId], references: [id])
+  column      BoardColumn? @relation(fields: [columnId], references: [id], onDelete: Cascade)
   columnId    String?
   comments    Comment[]
   createdAt   DateTime     @default(now())

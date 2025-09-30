@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma.service';
 import { CreateColumnDto } from './dto/create-column.dto';
 import { UpdateColumnDto } from './dto/update-column.dto';
-
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ColumnsService {
@@ -39,8 +39,15 @@ export class ColumnsService {
         });
     }
 
-    remove(id: string) {
-        return this.prisma.boardColumn.delete({where: {id}});
+    async remove(id: string): Promise<void> {
+        try {
+            await this.prisma.boardColumn.delete({ where: { id } });
+        } catch (e: any) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+                throw new NotFoundException('COLUMN_NOT_FOUND');
+            }
+            throw e;
+        }
     }
 
     async reorder(columnId: string, dto: { issueIds: string[] }) {
@@ -84,8 +91,8 @@ export class ColumnsService {
         }
 
         const found = await this.prisma.boardColumn.findMany({
-            where: { id: { in: columnIds }, boardId },
-            select: { id: true },
+            where: {id: {in: columnIds}, boardId},
+            select: {id: true},
         });
         if (found.length !== columnIds.length) {
             throw new NotFoundException('Some columns not found in this board');
@@ -94,12 +101,21 @@ export class ColumnsService {
         await this.prisma.$transaction(
             columnIds.map((id, idx) =>
                 this.prisma.boardColumn.update({
-                    where: { id },
-                    data: { order: idx },
+                    where: {id},
+                    data: {order: idx},
                 }),
             ),
         );
 
-        return { ok: true };
+        return {ok: true};
+    }
+
+    async deleteColumn(id: string) {
+        const col = await this.prisma.boardColumn.findUnique({where: {id}, select: {id: true}});
+        if (!col) throw new NotFoundException('COLUMN_NOT_FOUND');
+        await this.prisma.$transaction(async (tx) => {
+            await tx.issue.deleteMany({where: {columnId: id}});
+            await tx.boardColumn.delete({where: {id}});
+        });
     }
 }
