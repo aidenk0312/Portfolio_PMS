@@ -1,4 +1,5 @@
-import { Controller, Get, Query, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { IssuesService } from './issues.service';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
@@ -23,7 +24,8 @@ export class IssuesController {
     }
 
     @Delete(':id')
-    remove(@Param('id') id: string) {
-        return this.issues.remove(id);
+    async remove(@Param('id') id: string, @Res() res: Response): Promise<void> {
+        await this.issues.remove(id);
+        res.status(HttpStatus.NO_CONTENT).send();
     }
 }

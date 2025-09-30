@@ -1,10 +1,17 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateBoardDto } from './create-board.dto';
-import { IsInt, IsOptional, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsCuid } from '../../common/validators/is-cuid.validator';
 
-export class UpdateBoardDto extends PartialType(CreateBoardDto) {
+export class UpdateBoardDto {
+    @IsString()
     @IsOptional()
+    name?: string;
+
+    @IsString()
+    @IsCuid()
+    @IsOptional()
+    workspaceId?: string;
+
     @IsInt()
-    @Min(0)
+    @IsOptional()
     order?: number;
 }
