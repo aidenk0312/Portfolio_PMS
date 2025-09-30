@@ -6,20 +6,20 @@
 - [x] Prisma schema & migrations
 - [x] Health checks: /health, /health/db
 - [x] Kanban board
-  - Drag & drop cards within/between columns
-  - Horizontal column drag & drop
+  - Drag & drop cards within/between columns (dnd-kit)
+  - Horizontal column drag & drop (single-board mode)
   - Create / Rename / Delete columns
   - Create / Rename / Delete issues
   - Deterministic ordering persisted in DB
+  - Multi-board view with board picker (toggle multiple boards)
 - [x] Boards/Columns/Issues CRUD (NestJS + Prisma)
 - [x] Frontend API integration (App Router) and health dashboard
-- [x] Deletion policies (CASCADE/RESTRICT) + 204 responses on DELETE
 - [ ] Auth (email/social), org/workspace permissions
 - [ ] Audit log & activity feed
 - [ ] CI/CD & deployment
 
 ## Architecture
-- **Frontend: Next.js (App Router, TS, Tailwind)**
+- **Frontend: Next.js (App Router, TS, Tailwind, dnd-kit)**
 - **Rewrites: `/api/*` → `http://localhost:3001/*`**
 - **Backend: NestJS (Typescript) + Prisma**
 - **DB/Cache: PostgreSQL 16, Redis 7 (Docker)**
@@ -62,19 +62,30 @@ curl -s http://localhost:3001/health/db
 
 ## Kanban (Web)
 - URL: `http://localhost:3000/kanban`
-- Requires: `NEXT_PUBLIC_WORKSPACE_ID` , `NEXT_PUBLIC_API_BASE`
+- Requires: `NEXT_PUBLIC_WORKSPACE_ID`, `NEXT_PUBLIC_API_BASE`
+- Board picker:
+  - Click “Boards: N selected” to multi-select boards
+  - **Single-board mode** enables column DnD (left↔right)
+  - Issue DnD is always available (within column up/down and cross-column)
+- New Board:
+  - “New Board…” creates a board in the current workspace
 
 ## Behavior
-- Column DnD
-  - Drag token __COLUMN__:<id> distinguishes column drags from issue drags.
-  - Compute insertIndex by comparing mouse X to each column’s horizontal midpoint.
-  - Apply optimistic UI from a deep-copied snapshot, then call
-  - POST /columns/reorder { boardId, columnIds }.
+- Column DnD (single-board mode only)
+  - Uses @dnd-kit/core + @dnd-kit/sortable (closestCenter, rectSortingStrategy)
+  - On drop, compute the board’s column ID array and POST /columns/reorder { boardId, columnIds }
+  - Optimistic UI first, then server sync
+
 - Issue DnD
-  - Compute insertIndex by Y midpoint between items.
-  - Same-column: POST /columns/:id/reorder { issueIds }
-  - Cross-column: call reorder for both target and source columns
-  - When dragging down within same column: if srcIdx < destIdx, decrement destIdx by 1.
+  - Same column: POST /columns/:id/reorder { issueIds }
+  - Cross-column: reorder both target and source columns
+  - Sorting rule: (order ASC, createdAt ASC)
+  - Optimistic UI first, then server sync
+
+- Delete semantics
+  - DELETE /issues/:id, /columns/:id, /boards/:id return **204 No Content**
+  - Boards support `?cascade=true`
+  - 
 
 ## API Overview
 - Boards
@@ -83,14 +94,12 @@ curl -s http://localhost:3001/health/db
   - GET /boards/:id/full
   - POST /boards
   - PATCH /boards/:id
-  - DELETE /boards/:id
-    - Default RESTRICT (fails if board has columns)
-    - Cascade when `?cascade=true`
+  - DELETE /boards/:id[?cascade=true]  ← returns 204
 - Columns
   - GET /columns?boardId=...
   - POST /columns
   - PATCH /columns/:id
-  - DELETE /columns/:id
+  - DELETE /columns/:id  ← returns 204
   - POST /columns/:id/reorder
     - Body: { "issueIds": ["<issue-id-1>", ...] }
   - POST /columns/reorder
@@ -99,7 +108,7 @@ curl -s http://localhost:3001/health/db
   - GET /issues?workspaceId=...&columnId=...
   - POST /issues
   - PATCH /issues/:id
-  - DELETE /issues/:id
+  - DELETE /issues/:id  ← returns 204
 
 ## Deletion Policy
 | Relation            | onDelete | Rationale                              |
@@ -146,26 +155,23 @@ curl -i -X POST "http://localhost:3001/columns/$COL_ID/reorder" \
   -H "content-type: application/json" \
   -d "{\"issueIds\":$ISS_LIST}"
 
-# 5) delete issue (expects 204)
-ISSUE_ID=$(curl -s "http://localhost:3001/issues?workspaceId=$WS" | jq -r '.[0].id')
-curl -i -X DELETE "http://localhost:3001/issues/$ISSUE_ID"
+# 5) delete issue (204 expected)
+IID=$(curl -sS -X POST http://localhost:3001/issues \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"tmp","workspaceId":"'"$WS"'"}' | jq -r .id)
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE "http://localhost:3001/issues/$IID"  # 204
 
-# 6) delete column (expects 204)
-curl -i -X DELETE "http://localhost:3001/columns/$COL_ID"
-
-# 7) delete board (restrict should fail if it has columns)
-curl -i -X DELETE "http://localhost:3001/boards/$BOARD_ID"
-
-# 8) delete board with cascade (expects 204)
-curl -i -X DELETE "http://localhost:3001/boards/$BOARD_ID?cascade=true"
+# 6) delete board cascade (204 expected)
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE "http://localhost:3001/boards/$BOARD_ID?cascade=true"  # 204
 ~~~
 
-## E2E Tests
+## Test (API e2e)
 ~~~text
 cd apps/api
 pnpm run test:e2e
+# or a single file:
+pnpm run test:e2e:path
 ~~~
-Covers: create → columns → issues → move/reorder → get full → delete issue/column → board delete restrict/cascade.
 
 ## Troubleshooting
 - 400 columnIds is required
@@ -178,6 +184,10 @@ Covers: create → columns → issues → move/reorder → get full → delete i
 - Prisma schema problems
   - pnpm prisma format && pnpm prisma validate
   - Migrations: pnpm prisma migrate deploy (or pnpm prisma db push for early dev)
+- TypeScript strict errors (e.g., TS2339 on never)
+  - Add explicit generics to arrayMove/map/find
+  - Initialize state with typed empty arrays, e.g. useState<Type[]>([])
+  - In setState reducers, clone with typed maps: prev.map<T>(...) to avoid never narrowing
 
 ## Change History (Summary)
 - Optimistic UI with server synchronization
