@@ -6,22 +6,24 @@
 - [x] Prisma schema & migrations
 - [x] Health checks: /health, /health/db
 - [x] Kanban board
-  - Drag & drop cards within/between columns (dnd-kit)
-  - Horizontal column drag & drop (single-board mode)
+  - Drag & drop cards within/between columns
+  - Horizontal column drag & drop
   - Create / Rename / Delete columns
   - Create / Rename / Delete issues
   - Deterministic ordering persisted in DB
-  - Multi-board view with board picker (toggle multiple boards)
+  - **Multi-board select** (merge view or single-board focus)
+  - **Bulk:** Clear all columns & issues of the active board
 - [x] Boards/Columns/Issues CRUD (NestJS + Prisma)
 - [x] Frontend API integration (App Router) and health dashboard
+- [x] **UI v2:** Tailwind design tokens, header/actions polish, button/input/card primitives
 - [ ] Auth (email/social), org/workspace permissions
 - [ ] Audit log & activity feed
 - [ ] CI/CD & deployment
 
 ## Architecture
-- **Frontend: Next.js (App Router, TS, Tailwind, dnd-kit)**
+- **Frontend: Next.js (App Router, TS, Tailwind)**
 - **Rewrites: `/api/*` → `http://localhost:3001/*`**
-- **Backend: NestJS (Typescript) + Prisma**
+- **Backend: NestJS(Typescript) + Prisma**
 - **DB/Cache: PostgreSQL 16, Redis 7 (Docker)**
 - **Repo: pnpm + Turborepo 모노레포**
 ~~~text
@@ -69,6 +71,20 @@ curl -s http://localhost:3001/health/db
   - Issue DnD is always available (within column up/down and cross-column)
 - New Board:
   - “New Board…” creates a board in the current workspace
+    
+### Header actions
+- **Boards: N selected** — open board picker (multi-select)
+- **New Board…** — create a board in current workspace
+- **Delete Board…** — delete active board (option: cascade)
+- **Clear Columns…** — bulk delete all columns & issues in the active board
+- **Refresh** — reload boards/columns/issues
+
+## UI v2 (Tailwind v4)
+Design tokens & primitives used across the app.
+- **Tokens:** `brand`, `surface.{0,1,2}`, `text.{DEFAULT,mute}`, `danger/ok/warn`
+- **Radii & Shadows:** `rounded-xl/2xl`, `shadow-card/overlay`
+- **Primitives:** `.btn`, `.btn-primary`, `.btn-ghost`, `.btn-danger`, `.input`, `.card`, `.section`, `.badge-*`
+- **Header:** “Kanban — Project Management System”, visible labels for **New Board…**, **Delete Board…**, **Clear Columns…**, **Refresh**
 
 ## Behavior
 - Column DnD (single-board mode only)
