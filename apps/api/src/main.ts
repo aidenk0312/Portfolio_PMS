@@ -5,9 +5,6 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
-    // CORS 필요 시 주석 해제
-    // app.enableCors({ origin: 'http://localhost:3000', credentials: true });
-
     const origins = [
         'http://localhost:3000',
         'http://127.0.0.1:3000',
@@ -17,11 +14,15 @@ async function bootstrap() {
         origin: origins,
         methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
         credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization', 'x-board-id'],
     });
+
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
     app.enableShutdownHooks();
 
     const port = process.env.PORT ?? 3001;
     await app.listen(port);
+    // console.log(`API listening on http://localhost:${port}`);
 }
 bootstrap();

@@ -1,0 +1,9 @@
+node_modules
+.pnpm-store
+.turbo
+.next
+dist
+.git
+.env
+.env.*
+**/*.log
