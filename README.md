@@ -16,16 +16,18 @@
 - [x] Boards/Columns/Issues CRUD (NestJS + Prisma)
 - [x] Frontend API integration (App Router) and health dashboard
 - [x] **UI v2:** Tailwind design tokens, header/actions polish, button/input/card primitives
+- [x] Dev proxy rewrites for API (`/api/*`, `/boards/*`, `/columns/*`, `/issues/*`)
+- [x] Docker build (web/api) — Next.js standalone build, NestJS dist
 - [ ] Auth (email/social), org/workspace permissions
 - [ ] Audit log & activity feed
 - [ ] CI/CD & deployment
 
 ## Architecture
-- **Frontend: Next.js (App Router, TS, Tailwind)**
-- **Rewrites: `/api/*` → `http://localhost:3001/*`**
-- **Backend: NestJS(Typescript) + Prisma**
-- **DB/Cache: PostgreSQL 16, Redis 7 (Docker)**
-- **Repo: pnpm + Turborepo 모노레포**
+- **Frontend:** Next.js (App Router, TS, Tailwind)
+- **Dev rewrites:** `/api/*`, `/boards/*`, `/columns/*`, `/issues/*` → `${NEXT_PUBLIC_API_BASE}` (default: `http://localhost:3001`)
+- **Backend:** NestJS (TypeScript) + Prisma
+- **DB/Cache:** PostgreSQL 16, Redis 7 (Docker)
+- **Repo:** pnpm + Turborepo monorepo
 ~~~text
 apps/
   web/   # Next.js
@@ -34,6 +36,19 @@ infra/
   docker-compose.yml
 pnpm-workspace.yaml
 turbo.json
+~~~
+
+## Docker (build only)
+> Local image build only (deployment out of scope).
+
+~~~text
+# from repo root
+docker build -f apps/web/Dockerfile -t pms-web:local .
+docker build -f apps/api/Dockerfile -t pms-api:local .
+
+# Notes
+Web container exposes 3000
+API container exposes 4000 (dev server runs on 3001)
 ~~~
 
 ## Environment Variables
@@ -60,6 +75,10 @@ pnpm -r dev
 ~~~text
 curl -s http://localhost:3001/health
 curl -s http://localhost:3001/health/db
+
+Dev proxy note: apps/web/next.config.ts proxies
+/api/*, /boards/*, /columns/*, /issues/* to ${NEXT_PUBLIC_API_BASE}.
+If you change this value, restart the web dev server.
 ~~~
 
 ## Kanban (Web)
@@ -204,6 +223,16 @@ pnpm run test:e2e:path
   - Add explicit generics to arrayMove/map/find
   - Initialize state with typed empty arrays, e.g. useState<Type[]>([])
   - In setState reducers, clone with typed maps: prev.map<T>(...) to avoid never narrowing
+- Dev 404 / ECONNREFUSED
+  - Symptoms: 404 or proxy failure on `/boards`, `/columns`, `/issues`
+  - Checklist:
+    1) API is running (`PORT=3001`)
+    2) `apps/web/.env.local` → `NEXT_PUBLIC_API_BASE=http://localhost:3001`
+    3) Restart web dev server (`pnpm -C apps/web dev`)
+    4) Confirm rewrites are applied in `apps/web/next.config.ts`
+
+### util._extend Deprecation Warning
+- Next dev warning; harmless and can be ignored. 
 
 ## Change History (Summary)
 - Optimistic UI with server synchronization
