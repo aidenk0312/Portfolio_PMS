@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpStatus, Param, Patch, Post, Query, Res, BadRequestException, NotFoundException } from '@nestjs/common';
 import type { Response } from 'express';
 import { BoardsService } from './boards.service';
 import { CreateBoardDto } from './dto/create-board.dto';
@@ -19,12 +19,31 @@ export class BoardsController {
     }
 
     @Get(':id/full')
-    getBoardFull(@Param('id') id: string) {
-        return this.boards.getBoardFull(id);
+    async getBoardFull(@Param('id') id: string, @Res() res: Response) {
+        try {
+            const data = await this.boards.getBoardFull(id);
+            return res.status(HttpStatus.OK).json(data);
+        } catch (e: any) {
+            if (e instanceof NotFoundException || e?.status === 404) {
+                return res.status(HttpStatus.OK).json({ deleted: true });
+            }
+            throw e;
+        }
     }
 
     @Post()
-    create(@Body() dto: CreateBoardDto) {
+    create(
+        @Body() body: any,
+        @Query('workspaceId') qWs?: string,
+        @Headers('x-workspace-id') hWs?: string,
+    ) {
+        const name = (body?.name ?? body?.title)?.toString()?.trim();
+        const workspaceId = (body?.workspaceId ?? qWs ?? hWs ?? process.env.DEFAULT_WORKSPACE_ID)?.toString();
+
+        if (!name) throw new BadRequestException('name is required');
+        if (!workspaceId) throw new BadRequestException('workspaceId is required');
+
+        const dto: CreateBoardDto = { name, workspaceId };
         return this.boards.create(dto);
     }
 
@@ -34,8 +53,13 @@ export class BoardsController {
     }
 
     @Delete(':id')
-    async deleteBoard(@Param('id') id: string, @Query('cascade') cascade: string | undefined, @Res() res: Response): Promise<void> {
-        await this.boards.deleteBoard(id, cascade === 'true');
+    async deleteBoard(
+        @Param('id') id: string,
+        @Query('cascade') cascadeQ: string | undefined,
+        @Res() res: Response,
+    ): Promise<void> {
+        const allowCascade = ['true', '1', 'yes', 'on'].includes(String(cascadeQ ?? '').toLowerCase());
+        await this.boards.deleteBoard(id, allowCascade);
         res.status(HttpStatus.NO_CONTENT).send();
     }
 }

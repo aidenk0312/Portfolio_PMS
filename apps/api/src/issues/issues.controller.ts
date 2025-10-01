@@ -1,7 +1,6 @@
-import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpStatus, Param, Patch, Post, Query, Res, BadRequestException, Headers } from '@nestjs/common';
 import type { Response } from 'express';
 import { IssuesService } from './issues.service';
-import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
 
 @Controller('issues')
@@ -14,8 +13,25 @@ export class IssuesController {
     }
 
     @Post()
-    create(@Body() dto: CreateIssueDto) {
-        return this.issues.create(dto);
+    create(
+        @Body() body: any,
+        @Query('workspaceId') qWs?: string,
+        @Headers('x-workspace-id') hWs?: string,
+    ) {
+        const title = (body?.title ?? body?.name)?.toString()?.trim();
+        const columnId = body?.columnId?.toString();
+        const workspaceId = (body?.workspaceId ?? qWs ?? hWs ?? process.env.DEFAULT_WORKSPACE_ID)?.toString();
+
+        if (!title) throw new BadRequestException('title is required');
+        if (!columnId) throw new BadRequestException('columnId is required');
+        if (!workspaceId) throw new BadRequestException('workspaceId is required');
+
+        return this.issues.create({
+            title,
+            columnId,
+            workspaceId,
+            description: body?.description ?? '',
+        });
     }
 
     @Patch(':id')
