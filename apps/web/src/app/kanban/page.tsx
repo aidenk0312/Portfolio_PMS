@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
-import { useToast } from '@/app/components/Toast';
-import ConfirmModal from '@/app/components/ConfirmModal';
+import { useToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 import {
     DndContext,
