@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
-const api = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 
 const nextConfig: NextConfig = {
     reactStrictMode: true,
@@ -10,13 +10,18 @@ const nextConfig: NextConfig = {
         : {
             async rewrites() {
                 return [
-                    { source: "/api/:path*", destination: `${api}/:path*` },
-                    { source: "/boards", destination: `${api}/boards` },
-                    { source: "/boards/:path*", destination: `${api}/boards/:path*` },
-                    { source: "/columns", destination: `${api}/columns` },
-                    { source: "/columns/:path*", destination: `${api}/columns/:path*` },
-                    { source: "/issues", destination: `${api}/issues` },
-                    { source: "/issues/:path*", destination: `${api}/issues/:path*` },
+                    { source: "/api/boards",          destination: `${API}/boards` },
+                    { source: "/api/boards/:path*",   destination: `${API}/boards/:path*` },
+                    { source: "/api/columns",         destination: `${API}/columns` },
+                    { source: "/api/columns/:path*",  destination: `${API}/columns/:path*` },
+                    { source: "/api/issues",          destination: `${API}/issues` },
+                    { source: "/api/issues/:path*",   destination: `${API}/issues/:path*` },
+                    { source: "/boards",              destination: `${API}/boards` },
+                    { source: "/boards/:path*",       destination: `${API}/boards/:path*` },
+                    { source: "/columns",             destination: `${API}/columns` },
+                    { source: "/columns/:path*",      destination: `${API}/columns/:path*` },
+                    { source: "/issues",              destination: `${API}/issues` },
+                    { source: "/issues/:path*",       destination: `${API}/issues/:path*` },
                 ];
             },
         }),
