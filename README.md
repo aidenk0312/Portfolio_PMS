@@ -18,7 +18,7 @@
 - [x] **UI v2:** Tailwind design tokens, header/actions polish, button/input/card primitives
 - [x] Dev proxy rewrites for API (`/api/*`, `/boards/*`, `/columns/*`, `/issues/*`)
 - [x] Docker build (web/api) — Next.js standalone build, NestJS dist
-- [ ] Auth (email/social), org/workspace permissions
+- [x] Auth (GitHub via NextAuth) & minimal RBAC (GET open; write requires JWT)
 - [ ] Audit log & activity feed
 - [ ] CI/CD & deployment
 
@@ -56,12 +56,19 @@ API container exposes 4000 (dev server runs on 3001)
 ~~~text
 NEXT_PUBLIC_WORKSPACE_ID=ws_local
 NEXT_PUBLIC_API_BASE=http://localhost:3001
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=replace-with-32+chars
+GITHUB_ID=<your_github_oauth_client_id>
+GITHUB_SECRET=<your_github_oauth_client_secret>
 ~~~
 - **apps/api/.env**
 ~~~text
 DATABASE_URL=postgresql://app:app@127.0.0.1:5432/appdb?schema=public
 REDIS_URL=redis://localhost:6379
 PORT=3001
+
+# must match web's value
+NEXTAUTH_SECRET=replace-with-32+chars
 ~~~
 
 ## Run
@@ -80,6 +87,20 @@ Dev proxy note: apps/web/next.config.ts proxies
 /api/*, /boards/*, /columns/*, /issues/* to ${NEXT_PUBLIC_API_BASE}.
 If you change this value, restart the web dev server.
 ~~~
+
+## Auth & Minimal RBAC
+- **Login**: GitHub OAuth via NextAuth (`/api/auth/[...nextauth]`)
+- **Session**: JWT strategy; session includes `userId` and `apiToken` (HS256, `NEXTAUTH_SECRET`)
+- **User upsert**: On successful OAuth, web calls `POST /auth/upsert { email, name?, image? }` to create/update a User
+- **Route guard (web)**: `/kanban` requires auth; unauthenticated users are redirected to `/login`
+- **Write protection (API)**: Global guard
+  - `GET`/`HEAD`/`OPTIONS` → allowed without token
+  - `POST`/`PATCH`/`DELETE` → require `Authorization: Bearer <apiToken>`
+- **Bearer injection (web)**: Non-GET fetches automatically attach `Authorization` from session
+
+**GitHub OAuth setup**
+- OAuth App → Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
+- Copy **Client ID** → `GITHUB_ID`, generate **Client Secret** → `GITHUB_SECRET`
 
 ## Kanban (Web)
 - URL: `http://localhost:3000/kanban`
@@ -230,7 +251,18 @@ pnpm run test:e2e:path
     2) `apps/web/.env.local` → `NEXT_PUBLIC_API_BASE=http://localhost:3001`
     3) Restart web dev server (`pnpm -C apps/web dev`)
     4) Confirm rewrites are applied in `apps/web/next.config.ts`
-
+- Redirect to /auth/error or 404
+  - Ensure `apps/web/next.config.ts` does **not** proxy `/api/auth/*`.
+  - GitHub OAuth callback must be exactly: `http://localhost:3000/api/auth/callback/github`.
+- Write ops return 401
+  - Login first; confirm `apiToken` exists in session.
+  - Check request headers include `Authorization: Bearer <...>`.
+  - API must have `NEXTAUTH_SECRET` equal to web’s value.
+- Still proxying to backend for /api/auth/
+  - Restart web dev server after changing rewrites: `rm -rf apps/web/.next && pnpm -C apps/web dev`.
+- CORS preflight blocked
+  - API allows `OPTIONS/HEAD`; ensure your browser shows 200/204 for preflight.
+ 
 ### util._extend Deprecation Warning
 - Next dev warning; harmless and can be ignored. 
 
