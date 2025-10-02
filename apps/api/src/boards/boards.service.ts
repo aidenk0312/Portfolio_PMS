@@ -2,7 +2,6 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma.service';
 import { CreateBoardDto } from './dto/create-board.dto';
 import { UpdateBoardDto } from './dto/update-board.dto';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class BoardsService {
@@ -48,7 +47,7 @@ export class BoardsService {
         try {
             await this.prisma.board.delete({ where: { id } });
         } catch (e: any) {
-            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            if (e && typeof e.code === 'string' && e.code === 'P2025') {
                 throw new NotFoundException('BOARD_NOT_FOUND');
             }
             throw e;
@@ -66,9 +65,9 @@ export class BoardsService {
         const columnIds = (await this.prisma.boardColumn.findMany({
             where: { boardId: id },
             select: { id: true },
-        })).map((c) => c.id);
+        })).map((c: { id: string }) => c.id);
 
-        await this.prisma.$transaction(async (tx) => {
+        await this.prisma.$transaction(async (tx: any) => {
             if (columnIds.length) {
                 await tx.issue.deleteMany({ where: { columnId: { in: columnIds } } });
                 await tx.boardColumn.deleteMany({ where: { boardId: id } });

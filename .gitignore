@@ -19,7 +19,7 @@ pnpm-debug.log*
 apps/*/.env
 apps/*/.env.*
 !*.env.example
-!apps/*/.env.example
+!apps/api/.env
 !apps/*/.env.sample
 
 # Next.js

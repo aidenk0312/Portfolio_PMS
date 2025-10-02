@@ -1,23 +1,24 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+
+const { PrismaClient } = require('@prisma/client') as { PrismaClient: new () => any };
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService extends (PrismaClient as any) implements OnModuleInit, OnModuleDestroy {
     async onModuleInit() {
         const max = 8;
-        const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
         for (let i = 1; i <= max; i++) {
             try {
-                await this.$connect();
+                await (this as any).$connect();
                 return;
             } catch (e) {
                 if (i === max) throw e;
-                await sleep(500 * Math.pow(2, i - 1)); // 0.5s → 1s → 2s → 4s …
+                await sleep(500 * Math.pow(2, i - 1));
             }
         }
     }
 
     async onModuleDestroy() {
-        await this.$disconnect();
+        await (this as any).$disconnect();
     }
 }
