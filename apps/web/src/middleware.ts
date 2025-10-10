@@ -6,6 +6,10 @@ export default withAuth({
     },
 });
 
+// export const config = {
+//     matcher: ['/kanban'],
+// };
+
 export const config = {
-    matcher: ['/kanban'],
+    matcher: [],
 };
