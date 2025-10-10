@@ -1,20 +1,37 @@
-version: "3.8"
+version: "3.9"
+
 services:
   db:
     image: postgres:16
-    container_name: pms-postgres
+    container_name: pms-db
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
       POSTGRES_DB: appdb
-    ports:
-      - "5432:5432"
     volumes:
-      - dbdata:/var/lib/postgresql/data
+      - pms_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7
     container_name: pms-redis
     ports:
       - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - pms_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
-  dbdata:
+  pms_pg:
+  pms_redis:
