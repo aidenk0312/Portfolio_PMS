@@ -1,27 +1,38 @@
-import NextAuth from "next-auth";
-import GitHub from "next-auth/providers/github";
-import * as jwt from "jsonwebtoken";
-import type { JWT } from "next-auth/jwt";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-const authOptions: any = {
+import NextAuth from 'next-auth';
+import GitHub from 'next-auth/providers/github';
+import * as jwt from 'jsonwebtoken';
+
+const { GITHUB_ID, GITHUB_SECRET, NEXTAUTH_SECRET, NEXT_PUBLIC_API_BASE } = process.env;
+
+if (!GITHUB_ID || !GITHUB_SECRET) {
+    throw new Error('NextAuth config: GITHUB_ID / GITHUB_SECRET is missing');
+}
+if (!NEXTAUTH_SECRET || NEXTAUTH_SECRET.length < 32) {
+    throw new Error('NextAuth config: NEXTAUTH_SECRET must be 32+ characters');
+}
+
+const handler = NextAuth({
     providers: [
         GitHub({
-            clientId: process.env.GITHUB_ID as string,
-            clientSecret: process.env.GITHUB_SECRET as string,
-            allowDangerousEmailAccountLinking: true,
+            clientId: GITHUB_ID!,
+            clientSecret: GITHUB_SECRET!,
         }),
     ],
-    pages: { signIn: "/login" },
-    session: { strategy: "jwt" },
+    pages: { signIn: '/login' },
+    session: { strategy: 'jwt' },
+    debug: true,
     callbacks: {
-        async jwt({ token, account, profile }: { token: JWT; account?: any; profile?: any }): Promise<JWT> {
-            const apiUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
-            const needUpsert = !!token.email && (!(token as any).userId || account?.provider === "github");
+        async jwt({ token, account, profile }: any) {
+            const apiUrl = NEXT_PUBLIC_API_BASE || 'http://localhost:3001';
+            const needUpsert = !!token?.email && (!(token as any).userId || account?.provider === 'github');
             if (needUpsert) {
                 try {
                     const r = await fetch(`${apiUrl}/auth/upsert`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             email: token.email,
                             name: profile?.name ?? (token as any).name,
@@ -29,16 +40,14 @@ const authOptions: any = {
                         }),
                     });
                     const data: any = await r.json().catch(() => ({}));
-                    if (data?.userId) {
-                        (token as any).userId = data.userId;
-                    }
+                    if (data?.userId) (token as any).userId = data.userId;
                 } catch {}
             }
-            if ((token as any).userId && token.email) {
+            if ((token as any).userId && token?.email) {
                 (token as any).apiToken = jwt.sign(
                     { sub: (token as any).userId, email: token.email },
-                    process.env.NEXTAUTH_SECRET as string,
-                    { algorithm: "HS256", expiresIn: "1h" },
+                    NEXTAUTH_SECRET!,
+                    { algorithm: 'HS256', expiresIn: '1h' },
                 );
             }
             return token;
@@ -49,8 +58,7 @@ const authOptions: any = {
             return session;
         },
     },
-    secret: process.env.NEXTAUTH_SECRET,
-};
+    secret: NEXTAUTH_SECRET,
+});
 
-const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
