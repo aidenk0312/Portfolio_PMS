@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import * as jwt from "jsonwebtoken";
+import type { JWT } from "next-auth/jwt";
 
 const authOptions: any = {
     providers: [
@@ -10,34 +11,35 @@ const authOptions: any = {
             allowDangerousEmailAccountLinking: true,
         }),
     ],
-    pages: { signIn: "/login", error: "/login" },
+    pages: { signIn: "/login" },
     session: { strategy: "jwt" },
     callbacks: {
-        async jwt({ token, account, profile }: any) {
-            if (account?.provider === "github" && token?.email) {
-                const apiUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+        async jwt({ token, account, profile }: { token: JWT; account?: any; profile?: any }): Promise<JWT> {
+            const apiUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+            const needUpsert = !!token.email && (!(token as any).userId || account?.provider === "github");
+            if (needUpsert) {
                 try {
                     const r = await fetch(`${apiUrl}/auth/upsert`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             email: token.email,
-                            name: (profile as any)?.name ?? (token as any)?.name,
-                            image: (profile as any)?.avatar_url ?? (token as any)?.picture,
+                            name: profile?.name ?? (token as any).name,
+                            image: profile?.avatar_url ?? (token as any).picture,
                         }),
                     });
                     const data: any = await r.json().catch(() => ({}));
                     if (data?.userId) {
                         (token as any).userId = data.userId;
-                        (token as any).apiToken = jwt.sign(
-                            { sub: data.userId, email: token.email },
-                            process.env.NEXTAUTH_SECRET as string,
-                            { algorithm: "HS256", expiresIn: "1h" },
-                        );
                     }
-                } catch {
-                    // dev-only: ignore
-                }
+                } catch {}
+            }
+            if ((token as any).userId && token.email) {
+                (token as any).apiToken = jwt.sign(
+                    { sub: (token as any).userId, email: token.email },
+                    process.env.NEXTAUTH_SECRET as string,
+                    { algorithm: "HS256", expiresIn: "1h" },
+                );
             }
             return token;
         },
