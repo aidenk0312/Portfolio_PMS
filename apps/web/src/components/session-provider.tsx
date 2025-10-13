@@ -25,12 +25,17 @@ export default function SessionProv({ children }: PropsWithChildren) {
 
             const session = await getSession();
             const token = (session as any)?.apiToken as string | undefined;
-            if (token) {
-                const headers = new Headers(init?.headers || {});
-                headers.set('Authorization', `Bearer ${token}`);
-                return originalFetch(input as any, { ...init, headers });
+
+            const headers = new Headers(init?.headers || {});
+            if (token && !headers.has('authorization')) headers.set('authorization', `Bearer ${token}`);
+            const ws = process.env.NEXT_PUBLIC_WORKSPACE_ID;
+            if (ws && !headers.has('x-workspace-id')) headers.set('x-workspace-id', ws);
+            if (!headers.has('accept')) headers.set('accept', 'application/json');
+            if (!headers.has('content-type') && typeof (init as any)?.body === 'string') {
+                headers.set('content-type', 'application/json');
             }
-            return originalFetch(input as any, init);
+
+            return originalFetch(input as any, { ...init, headers });
         };
 
         return () => {

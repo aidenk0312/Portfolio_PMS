@@ -6,9 +6,7 @@ export class AuthController {
     constructor(private readonly auth: AuthService) {}
 
     @Post('upsert')
-    async upsert(@Body() body: { email: string; name?: string; image?: string }) {
-        if (!body?.email) return { error: 'email-required' };
-        const user = await this.auth.upsertUserByEmail(body.email, body.name, body.image);
-        return { userId: user.id };
+    upsert(@Body() body: { email: string; name?: string; image?: string }) {
+        return this.auth.upsertUserAndMembership(body);
     }
 }

@@ -13,8 +13,8 @@ export class IssuesController {
         return this.issues.findMany({ workspaceId, columnId });
     }
 
+    @ScopeRole('board', 'MEMBER')
     @Post()
-    @ScopeRole('workspace', 'MEMBER')
     create(
         @Body() body: any,
         @Query('workspaceId') qWs?: string,
@@ -23,9 +23,11 @@ export class IssuesController {
         const title = (body?.title ?? body?.name)?.toString()?.trim();
         const columnId = body?.columnId?.toString();
         const workspaceId = (body?.workspaceId ?? qWs ?? hWs ?? process.env.DEFAULT_WORKSPACE_ID)?.toString();
+
         if (!title) throw new BadRequestException('title is required');
         if (!columnId) throw new BadRequestException('columnId is required');
         if (!workspaceId) throw new BadRequestException('workspaceId is required');
+
         return this.issues.create({
             title,
             columnId,
@@ -34,14 +36,14 @@ export class IssuesController {
         });
     }
 
-    @Patch(':id')
     @ScopeRole('board', 'MEMBER')
+    @Patch(':id')
     update(@Param('id') id: string, @Body() dto: UpdateIssueDto) {
         return this.issues.update(id, dto);
     }
 
-    @Delete(':id')
     @ScopeRole('board', 'MEMBER')
+    @Delete(':id')
     async remove(@Param('id') id: string, @Res() res: Response): Promise<void> {
         await this.issues.remove(id);
         res.status(HttpStatus.NO_CONTENT).send();

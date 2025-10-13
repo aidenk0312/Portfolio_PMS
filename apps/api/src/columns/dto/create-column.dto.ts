@@ -1,5 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { IsCuid } from '../../common/validators/is-cuid.validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateColumnDto {
     @IsString()
@@ -7,10 +6,11 @@ export class CreateColumnDto {
     name!: string;
 
     @IsString()
-    @IsCuid()
+    @IsNotEmpty()
     boardId!: string;
 
-    @IsInt()
     @IsOptional()
+    @IsInt()
+    @Min(0)
     order?: number;
 }

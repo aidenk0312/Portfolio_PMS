@@ -1,18 +1,13 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
-import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
 
 @Module({
-    imports: [
-        JwtModule.register({
-            secret: process.env.NEXTAUTH_SECRET,
-            signOptions: { algorithm: 'HS256' },
-        }),
-    ],
+    imports: [ConfigModule.forRoot({ isGlobal: true })],
     controllers: [AuthController],
-    providers: [PrismaService, AuthService],
-    exports: [JwtModule],
+    providers: [AuthService, PrismaService],
+    exports: [AuthService],
 })
 export class AuthModule {}

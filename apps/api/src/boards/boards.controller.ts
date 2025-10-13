@@ -32,8 +32,8 @@ export class BoardsController {
         }
     }
 
-    @Post()
     @ScopeRole('workspace', 'MEMBER')
+    @Post()
     create(
         @Body() body: any,
         @Query('workspaceId') qWs?: string,
@@ -41,20 +41,22 @@ export class BoardsController {
     ) {
         const name = (body?.name ?? body?.title)?.toString()?.trim();
         const workspaceId = (body?.workspaceId ?? qWs ?? hWs ?? process.env.DEFAULT_WORKSPACE_ID)?.toString();
+
         if (!name) throw new BadRequestException('name is required');
         if (!workspaceId) throw new BadRequestException('workspaceId is required');
+
         const dto: CreateBoardDto = { name, workspaceId };
         return this.boards.create(dto);
     }
 
+    @ScopeRole('workspace', 'MEMBER')
     @Patch(':id')
-    @ScopeRole('board', 'MEMBER')
     update(@Param('id') id: string, @Body() dto: UpdateBoardDto) {
         return this.boards.update(id, dto);
     }
 
+    @ScopeRole('workspace', 'MEMBER')
     @Delete(':id')
-    @ScopeRole('board', 'ADMIN')
     async deleteBoard(
         @Param('id') id: string,
         @Query('cascade') cascadeQ: string | undefined,

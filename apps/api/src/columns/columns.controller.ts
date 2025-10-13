@@ -16,33 +16,33 @@ export class ColumnsController {
         return this.columns.findMany(boardId);
     }
 
-    @Post()
     @ScopeRole('board', 'MEMBER')
+    @Post()
     create(@Body() dto: CreateColumnDto) {
         return this.columns.create(dto);
     }
 
-    @Patch(':id')
     @ScopeRole('board', 'MEMBER')
+    @Patch(':id')
     update(@Param('id') id: string, @Body() dto: UpdateColumnDto) {
         return this.columns.update(id, dto);
     }
 
+    @ScopeRole('board', 'MEMBER')
     @Delete(':id')
-    @ScopeRole('board', 'ADMIN')
     async remove(@Param('id') id: string, @Res() res: Response): Promise<void> {
         await this.columns.remove(id);
         res.status(HttpStatus.NO_CONTENT).send();
     }
 
-    @Post(':id/reorder')
     @ScopeRole('board', 'MEMBER')
+    @Post(':id/reorder')
     reorder(@Param('id') columnId: string, @Body() dto: ReorderIssuesInColumnDto) {
         return this.columns.reorder(columnId, dto);
     }
 
-    @Post('/reorder')
     @ScopeRole('board', 'MEMBER')
+    @Post('/reorder')
     reorderColumns(@Body() dto: ReorderColumnsDto) {
         return this.columns.reorderColumns(dto.boardId, dto.columnIds);
     }
