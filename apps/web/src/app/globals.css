@@ -18,3 +18,9 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+:root[data-ro="1"] .write-only { display: none !important; }
+:root[data-ro="1"] .requires-write { pointer-events: none !important; opacity: 0.5; }
+:root[data-ro="1"] [data-write] { pointer-events: none !important; opacity: .5; }
+
+html[data-ro="1"] .requires-write { pointer-events: none; opacity: .6; }

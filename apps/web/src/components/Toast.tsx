@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
+import { on } from '@/lib/events';
 
 type Toast = { id: string; msg: string };
 type Ctx = {
@@ -26,6 +27,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         setItems((xs) => xs.filter((x) => x.id !== id));
     }, []);
 
+    useEffect(() => {
+        const off403 = on('api:forbidden', () => push('Forbidden (403): You do not have permission.'));
+        const off401 = on('api:unauthorized', () => push('Unauthorized (401): Please sign in again.'));
+        return () => {
+            off403();
+            off401();
+        };
+    }, [push]);
+
     const value = useMemo(() => ({ push, remove, items }), [push, remove, items]);
 
     return (
@@ -33,11 +43,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             {children}
             <div className="fixed bottom-4 right-4 z-[1002] space-y-2">
                 {items.map((t) => (
-                    <div
-                        key={t.id}
-                        className="rounded-lg bg-black text-white text-sm px-3 py-2 shadow-lg"
-                        role="status"
-                    >
+                    <div key={t.id} className="rounded-lg bg-black text-white text-sm px-3 py-2 shadow-lg" role="status">
                         {t.msg}
                     </div>
                 ))}

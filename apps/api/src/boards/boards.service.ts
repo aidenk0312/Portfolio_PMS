@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../prisma.service';
 import { CreateBoardDto } from './dto/create-board.dto';
 import { UpdateBoardDto } from './dto/update-board.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class BoardsService {
@@ -54,26 +55,25 @@ export class BoardsService {
         }
     }
 
-    async deleteBoard(id: string, cascade = false): Promise<void> {
-        const exists = await this.prisma.board.findUnique({ where: { id }, select: { id: true } });
-        if (!exists) throw new NotFoundException('BOARD_NOT_FOUND');
-
-        if (!cascade) {
-            throw new ConflictException('BOARD_DELETE_RESTRICT');
+    async deleteBoard(id: string, allowCascade: boolean): Promise<void> {
+        if (allowCascade) {
+            await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+                await tx.issue.deleteMany({ where: { column: { boardId: id } } });
+                await tx.boardColumn.deleteMany({ where: { boardId: id } });
+                await tx.board.delete({ where: { id } });
+            });
+            return;
         }
 
-        const columnIds = (await this.prisma.boardColumn.findMany({
-            where: { boardId: id },
-            select: { id: true },
-        })).map((c: { id: string }) => c.id);
-
-        await this.prisma.$transaction(async (tx: any) => {
-            if (columnIds.length) {
-                await tx.issue.deleteMany({ where: { columnId: { in: columnIds } } });
-                await tx.boardColumn.deleteMany({ where: { boardId: id } });
+        try {
+            await this.prisma.board.delete({ where: { id } });
+        } catch (e: any) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError) {
+                if (e.code === 'P2025') throw new NotFoundException('BOARD_NOT_FOUND');
+                if (e.code === 'P2003') throw new ConflictException('BOARD_HAS_CHILDREN');
             }
-            await tx.board.delete({ where: { id } });
-        });
+            throw e;
+        }
     }
 
     async getBoardFull(id: string) {
