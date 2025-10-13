@@ -23,6 +23,7 @@ import {
     rectSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useRBAC } from '@/hooks/useRBAC';
 
 type Issue = {
     id: string;
@@ -78,7 +79,7 @@ const input =
 
 const card = 'rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_0_rgb(0_0_0/0.05),0_6px_16px_-8px_rgb(0_0_0/0.15)]';
 
-function SortableIssue({ issue, children }: { issue: Issue; children: React.ReactNode }) {
+function SortableIssue({ issue, children, draggable }: { issue: Issue; children: React.ReactNode; draggable: boolean }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging, setActivatorNodeRef } =
         useSortable({ id: issue.id });
     const style = { transform: CSS.Transform.toString(transform), transition };
@@ -89,7 +90,11 @@ function SortableIssue({ issue, children }: { issue: Issue; children: React.Reac
             className={cn(card, 'p-3', isDragging && 'opacity-70')}
             data-id={issue.id}
         >
-            <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
+            <div
+                ref={setActivatorNodeRef}
+                {...(draggable ? { ...attributes, ...listeners } : {})}
+                className={cn(!draggable && 'cursor-not-allowed opacity-60')}
+            >
                 {children}
             </div>
         </li>
@@ -160,6 +165,9 @@ export default function KanbanPage() {
     const { push } = useToast();
     const workspaceId = useMemo(() => WS ?? '', []);
 
+    const { role, canWrite, ready } = useRBAC();
+    const readOnly = ready ? !canWrite : false;
+
     const singleBoardMode = selectedBoardIds.length === 1;
     const activeBoard = singleBoardMode ? allBoards.find((b) => b.id === selectedBoardIds[0]) ?? null : null;
 
@@ -182,6 +190,15 @@ export default function KanbanPage() {
         } finally {
             setBusy((k) => (k === key ? null : k));
         }
+    };
+
+    const jsonOrThrow = async (r: Response, fallbackMsg: string) => {
+        if (r.ok) return r.json().catch(() => ({}));
+        if (r.status === 403) {
+            push('Viewer: read-only 권한입니다');
+            throw new Error('FORBIDDEN');
+        }
+        throw new Error(`${fallbackMsg}: ${r.status}`);
     };
 
     const fetchFullBoard = async (id: string): Promise<FullBoard> => {
@@ -237,11 +254,10 @@ export default function KanbanPage() {
 
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedBoardIds.join('|')]);
 
     const createBoardQuick = async () => {
-        if (!workspaceId) return;
+        if (!workspaceId || readOnly) return;
         const name = window.prompt('New board name');
         if (!name?.trim()) return;
         await withBusy('create-board', async () => {
@@ -250,14 +266,16 @@ export default function KanbanPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: name.trim(), workspaceId }),
             });
-            if (!r.ok) throw new Error(`Create board failed: ${r.status}`);
+            await jsonOrThrow(r, 'Create board failed');
             push('Board created');
             await load();
-        }).catch((e) => push(e instanceof Error ? e.message : 'Create board failed'));
+        }).catch((e) => {
+            if (e?.message !== 'FORBIDDEN') push(e instanceof Error ? e.message : 'Create board failed');
+        });
     };
 
     const createColumn = async () => {
-        if (!activeBoard) return;
+        if (!activeBoard || readOnly) return;
         if (!newColumn.trim()) return;
         await withBusy('create-col', async () => {
             const body = {
@@ -270,14 +288,17 @@ export default function KanbanPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            if (!r.ok) throw new Error(`Create column failed: ${r.status}`);
+            await jsonOrThrow(r, 'Create column failed');
             setNewColumn('');
             push('Column created');
             await load();
-        }).catch((e) => push(e instanceof Error ? e.message : 'Create column failed'));
+        }).catch((e) => {
+            if (e?.message !== 'FORBIDDEN') push(e instanceof Error ? e.message : 'Create column failed');
+        });
     };
 
     const createIssue = async (columnId: string) => {
+        if (readOnly) return;
         const title = (newIssueTitleByCol[columnId] ?? '').trim();
         if (!title || !workspaceId) return;
         await withBusy(`create-issue:${columnId}`, async () => {
@@ -287,14 +308,17 @@ export default function KanbanPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            if (!r.ok) throw new Error(`Create issue failed: ${r.status}`);
+            await jsonOrThrow(r, 'Create issue failed');
             setNewIssueTitleByCol((m) => ({ ...m, [columnId]: '' }));
             push('Issue created');
             await load();
-        }).catch((e) => push(e instanceof Error ? e.message : 'Create issue failed'));
+        }).catch((e) => {
+            if (e?.message !== 'FORBIDDEN') push(e instanceof Error ? e.message : 'Create issue failed');
+        });
     };
 
     const patchColumn = async (id: string, name: string) => {
+        if (readOnly) return;
         if (!name.trim()) return;
         await withBusy(`rename-col:${id}`, async () => {
             const r = await fetch(`/api/columns/${id}`, {
@@ -302,14 +326,17 @@ export default function KanbanPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: name.trim() }),
             });
-            if (!r.ok) throw new Error(`Update column failed: ${r.status}`);
+            await jsonOrThrow(r, 'Update column failed');
             setEditingColumn(null);
             push('Column renamed');
             await load();
-        }).catch((e) => push(e instanceof Error ? e.message : 'Update column failed'));
+        }).catch((e) => {
+            if (e?.message !== 'FORBIDDEN') push(e instanceof Error ? e.message : 'Update column failed');
+        });
     };
 
     const patchIssue = async (id: string, title: string) => {
+        if (readOnly) return;
         if (!title.trim()) return;
         await withBusy(`rename-issue:${id}`, async () => {
             const r = await fetch(`/api/issues/${id}`, {
@@ -317,14 +344,17 @@ export default function KanbanPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: title.trim() }),
             });
-            if (!r.ok) throw new Error(`Update issue failed: ${r.status}`);
+            await jsonOrThrow(r, 'Update issue failed');
             setEditingIssue(null);
             push('Issue renamed');
             await load();
-        }).catch((e) => push(e instanceof Error ? e.message : 'Update issue failed'));
+        }).catch((e) => {
+            if (e?.message !== 'FORBIDDEN') push(e instanceof Error ? e.message : 'Update issue failed');
+        });
     };
 
     const askDeleteColumn = (id: string) => {
+        if (readOnly) return;
         setConfirm({
             open: true,
             title: 'Delete this column?',
@@ -332,7 +362,9 @@ export default function KanbanPage() {
             onYes: async () => {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
-                    await fetch(`/api/columns/${id}`, { method: 'DELETE' });
+                    const r = await fetch(`/api/columns/${id}`, { method: 'DELETE' });
+                    if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                    if (!r.ok) throw new Error(`Delete column failed: ${r.status}`);
                     push('Column deleted');
                     await load();
                 } finally {
@@ -344,7 +376,7 @@ export default function KanbanPage() {
     };
 
     const askClearColumns = () => {
-        if (!activeBoard) return;
+        if (!activeBoard || readOnly) return;
         setConfirm({
             open: true,
             title: 'Delete ALL columns on this board?',
@@ -353,10 +385,12 @@ export default function KanbanPage() {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
                     const r = await fetch(`/api/columns?boardId=${activeBoard.id}`, { cache: 'no-store' });
+                    if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
                     if (!r.ok) throw new Error(`GET /columns ${r.status}`);
                     const cols: Column[] = await r.json();
                     for (const c of cols) {
-                        await fetch(`/api/columns/${c.id}`, { method: 'DELETE' });
+                        const del = await fetch(`/api/columns/${c.id}`, { method: 'DELETE' });
+                        if (del.status === 403) { push('Viewer: read-only 권한입니다'); return; }
                     }
                     push('All columns deleted');
                     await load();
@@ -369,13 +403,16 @@ export default function KanbanPage() {
     };
 
     const askDeleteIssue = (id: string) => {
+        if (readOnly) return;
         setConfirm({
             open: true,
             title: 'Delete this issue?',
             onYes: async () => {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
-                    await fetch(`/api/issues/${id}`, { method: 'DELETE' });
+                    const r = await fetch(`/api/issues/${id}`, { method: 'DELETE' });
+                    if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                    if (!r.ok) throw new Error(`Delete issue failed: ${r.status}`);
                     push('Issue deleted');
                     await load();
                 } finally {
@@ -387,7 +424,7 @@ export default function KanbanPage() {
     };
 
     const askDeleteBoard = () => {
-        if (!activeBoard) return;
+        if (!activeBoard || readOnly) return;
         setCascade(false);
         setConfirm({
             open: true,
@@ -397,7 +434,21 @@ export default function KanbanPage() {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
                     const qs = cascade ? '?cascade=true' : '';
-                    await fetch(`/api/boards/${activeBoard.id}${qs}`, { method: 'DELETE' });
+                    const r = await fetch(`/api/boards/${activeBoard.id}${qs}`, { method: 'DELETE' });
+
+                    if (r.status === 409 && !cascade) {
+                        const ok = window.confirm('This board has columns/issues. Delete EVERYTHING (cascade)?');
+                        if (ok) {
+                            const r2 = await fetch(`/api/boards/${activeBoard.id}?cascade=true`, { method: 'DELETE' });
+                            if (!r2.ok) throw new Error(`Delete board failed: ${r2.status}`);
+                        } else {
+                            push('Cancelled');
+                            return;
+                        }
+                    } else if (!r.ok) {
+                        throw new Error(`Delete board failed: ${r.status}`);
+                    }
+
                     push(cascade ? 'Board deleted with all columns & issues' : 'Board deleted');
                     const nextSelected = selectedBoardIds.filter((x) => x !== activeBoard.id);
                     setSelectedBoardIds(nextSelected.length ? nextSelected : []);
@@ -411,6 +462,7 @@ export default function KanbanPage() {
     };
 
     const onDragStart = (e: DragStartEvent) => {
+        if (readOnly) return;
         const id = String(e.active.id);
         const col = columnsByActive.find((c) => c.id === id);
         if (col) {
@@ -431,6 +483,7 @@ export default function KanbanPage() {
     };
 
     const onDragOver = (e: DragOverEvent) => {
+        if (readOnly) return;
         if (!activeDrag) return;
         const overId = e.over?.id ? String(e.over.id) : null;
         if (!overId) return;
@@ -471,6 +524,7 @@ export default function KanbanPage() {
     };
 
     const onDragEnd = async (e: DragEndEvent) => {
+        if (readOnly) return;
         const activeId = String(e.active.id);
         const overId = e.over?.id ? String(e.over.id) : null;
 
@@ -487,11 +541,12 @@ export default function KanbanPage() {
                 setColumns([...others, ...nextScoped]);
 
                 const columnIds = nextScoped.map((c) => c.id);
-                await fetch('/api/columns/reorder', {
+                const r = await fetch('/api/columns/reorder', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ boardId: activeBoard.id, columnIds }),
                 });
+                if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
                 push('Columns reordered');
                 await load();
                 return;
@@ -557,13 +612,14 @@ export default function KanbanPage() {
                 const fromIds = (updatedScoped.find((c) => c.id === fromColId)?.issues ?? []).map((i) => i.id);
 
                 if (fromColId === toColId) {
-                    await fetch(`/api/columns/${toColId}/reorder`, {
+                    const r1 = await fetch(`/api/columns/${toColId}/reorder`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ issueIds: toIds }),
                     });
+                    if (r1.status === 403) { push('Viewer: read-only 권한입니다'); return; }
                 } else {
-                    await Promise.all([
+                    const [r1, r2] = await Promise.all([
                         fetch(`/api/columns/${toColId}/reorder`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -575,6 +631,7 @@ export default function KanbanPage() {
                             body: JSON.stringify({ issueIds: fromIds }),
                         }),
                     ]);
+                    if (r1.status === 403 || r2.status === 403) { push('Viewer: read-only 권한입니다'); return; }
                 }
 
                 push('Reordered');
@@ -587,7 +644,7 @@ export default function KanbanPage() {
     };
 
     return (
-        <main className="min-h-screen bg-slate-50 text-slate-900">
+        <main className="min-h-screen bg-slate-50 text-slate-900" data-ui-scope="kanban">
             <ConfirmModal
                 open={confirm.open}
                 title={confirm.title}
@@ -628,17 +685,22 @@ export default function KanbanPage() {
                         </button>
 
                         {singleBoardMode && activeBoard && (
-                            <button onClick={askClearColumns} className={btnWarn} title="Delete all columns on this board">
+                            <button
+                                onClick={askClearColumns}
+                                className={cn(btnWarn, 'requires-write')}
+                                title="Delete all columns on this board"
+                                disabled={readOnly}
+                            >
                                 Clear Columns…
                             </button>
                         )}
 
-                        <button onClick={createBoardQuick} className={btnPrimary}>
+                        <button onClick={createBoardQuick} className={cn(btnPrimary, 'requires-write')} disabled={readOnly}>
                             Add Board
                         </button>
 
                         {singleBoardMode && activeBoard && (
-                            <button onClick={askDeleteBoard} className={btnDanger}>
+                            <button onClick={askDeleteBoard} className={cn(btnDanger, 'requires-write')} disabled={readOnly}>
                                 Delete Board…
                             </button>
                         )}
@@ -659,9 +721,14 @@ export default function KanbanPage() {
                                 value={newColumn}
                                 onChange={(e) => setNewColumn(e.target.value)}
                                 placeholder="New column"
-                                className={input}
+                                className={cn(input, 'requires-write')}
+                                disabled={readOnly}
                             />
-                            <button onClick={createColumn} className={btn} disabled={busy === 'create-col'}>
+                            <button
+                                onClick={createColumn}
+                                className={cn(btn, 'requires-write')}
+                                disabled={readOnly || busy === 'create-col'}
+                            >
                                 {busy === 'create-col' ? 'Adding…' : 'Add Column'}
                             </button>
                         </div>
@@ -682,7 +749,7 @@ export default function KanbanPage() {
                                     <SortableColumn
                                         key={col.id}
                                         column={col}
-                                        draggable={singleBoardMode}
+                                        draggable={singleBoardMode && !readOnly}
                                         headerLeft={
                                             <>
                                                 {!singleBoardMode && (
@@ -695,16 +762,21 @@ export default function KanbanPage() {
                                                         <input
                                                             value={editingColumn.name}
                                                             onChange={(e) => setEditingColumn({ id: col.id, name: e.target.value })}
-                                                            className={cn(input, 'h-8 w-44')}
+                                                            className={cn(input, 'h-8 w-44', 'requires-write')}
+                                                            disabled={readOnly}
                                                         />
                                                         <button
-                                                            className={cn(btn, 'px-2 py-1 text-xs')}
+                                                            className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
                                                             onClick={() => patchColumn(col.id, editingColumn.name.trim())}
-                                                            disabled={busy === `rename-col:${col.id}`}
+                                                            disabled={readOnly || busy === `rename-col:${col.id}`}
                                                         >
                                                             {busy === `rename-col:${col.id}` ? 'Saving…' : 'Save'}
                                                         </button>
-                                                        <button className={cn(btn, 'px-2 py-1 text-xs')} onClick={() => setEditingColumn(null)}>
+                                                        <button
+                                                            className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
+                                                            onClick={() => setEditingColumn(null)}
+                                                            disabled={readOnly}
+                                                        >
                                                             Cancel
                                                         </button>
                                                     </div>
@@ -717,10 +789,18 @@ export default function KanbanPage() {
                                             <div className="flex items-center gap-2">
                                                 {editingColumn?.id !== col.id && (
                                                     <>
-                                                        <button className={cn(btn, 'px-2 py-1 text-xs')} onClick={() => setEditingColumn({ id: col.id, name: col.name })}>
+                                                        <button
+                                                            className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
+                                                            onClick={() => setEditingColumn({ id: col.id, name: col.name })}
+                                                            disabled={readOnly}
+                                                        >
                                                             Rename
                                                         </button>
-                                                        <button className={cn(btn, 'px-2 py-1 text-xs')} onClick={() => askDeleteColumn(col.id)}>
+                                                        <button
+                                                            className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
+                                                            onClick={() => askDeleteColumn(col.id)}
+                                                            disabled={readOnly}
+                                                        >
                                                             Delete
                                                         </button>
                                                     </>
@@ -739,12 +819,13 @@ export default function KanbanPage() {
                                                     }))
                                                 }
                                                 placeholder="New issue"
-                                                className={input}
+                                                className={cn(input, 'requires-write')}
+                                                disabled={readOnly}
                                             />
                                             <button
                                                 onClick={() => createIssue(col.id)}
-                                                className={btn}
-                                                disabled={busy === `create-issue:${col.id}`}
+                                                className={cn(btn, 'requires-write')}
+                                                disabled={readOnly || busy === `create-issue:${col.id}`}
                                             >
                                                 {busy === `create-issue:${col.id}` ? 'Adding…' : 'Add'}
                                             </button>
@@ -756,22 +837,29 @@ export default function KanbanPage() {
                                                     const label =
                                                         columnsByActive.find((c) => c.id === (iss.columnId ?? col.id))?.name ?? col.name;
                                                     return (
-                                                        <SortableIssue key={iss.id} issue={iss}>
+                                                        <SortableIssue key={iss.id} issue={iss} draggable={!readOnly}>
                                                             {editingIssue?.id === iss.id ? (
                                                                 <div className="flex items-center gap-2">
                                                                     <input
                                                                         value={editingIssue.title}
-                                                                        onChange={(e) => setEditingIssue({ id: iss.id, title: e.target.value, colId: col.id })}
-                                                                        className={input}
+                                                                        onChange={(e) =>
+                                                                            setEditingIssue({ id: iss.id, title: e.target.value, colId: col.id })
+                                                                        }
+                                                                        className={cn(input, 'requires-write')}
+                                                                        disabled={readOnly}
                                                                     />
                                                                     <button
-                                                                        className={cn(btn, 'px-2 py-1 text-xs')}
+                                                                        className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
                                                                         onClick={() => patchIssue(iss.id, editingIssue.title.trim())}
-                                                                        disabled={busy === `rename-issue:${iss.id}`}
+                                                                        disabled={readOnly || busy === `rename-issue:${iss.id}`}
                                                                     >
                                                                         {busy === `rename-issue:${iss.id}` ? 'Saving…' : 'Save'}
                                                                     </button>
-                                                                    <button className={cn(btn, 'px-2 py-1 text-xs')} onClick={() => setEditingIssue(null)}>
+                                                                    <button
+                                                                        className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
+                                                                        onClick={() => setEditingIssue(null)}
+                                                                        disabled={readOnly}
+                                                                    >
                                                                         Cancel
                                                                     </button>
                                                                 </div>
@@ -783,12 +871,17 @@ export default function KanbanPage() {
                                                                     </div>
                                                                     <div className="shrink-0 flex items-center gap-2">
                                                                         <button
-                                                                            className={cn(btn, 'px-2 py-1 text-xs')}
+                                                                            className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
                                                                             onClick={() => setEditingIssue({ id: iss.id, title: iss.title, colId: col.id })}
+                                                                            disabled={readOnly}
                                                                         >
                                                                             Rename
                                                                         </button>
-                                                                        <button className={cn(btn, 'px-2 py-1 text-xs')} onClick={() => askDeleteIssue(iss.id)}>
+                                                                        <button
+                                                                            className={cn(btn, 'px-2 py-1 text-xs', 'requires-write')}
+                                                                            onClick={() => askDeleteIssue(iss.id)}
+                                                                            disabled={readOnly}
+                                                                        >
                                                                             Delete
                                                                         </button>
                                                                     </div>
