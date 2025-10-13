@@ -24,6 +24,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useRBAC } from '@/hooks/useRBAC';
+import RoleBadge from '@/components/role-badge';
 
 type Issue = {
     id: string;
@@ -195,7 +196,7 @@ export default function KanbanPage() {
     const jsonOrThrow = async (r: Response, fallbackMsg: string) => {
         if (r.ok) return r.json().catch(() => ({}));
         if (r.status === 403) {
-            push('Viewer: read-only 권한입니다');
+            push('Viewer: read-only permission');
             throw new Error('FORBIDDEN');
         }
         throw new Error(`${fallbackMsg}: ${r.status}`);
@@ -363,7 +364,7 @@ export default function KanbanPage() {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
                     const r = await fetch(`/api/columns/${id}`, { method: 'DELETE' });
-                    if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                    if (r.status === 403) { push('Viewer: read-only permission'); return; }
                     if (!r.ok) throw new Error(`Delete column failed: ${r.status}`);
                     push('Column deleted');
                     await load();
@@ -385,12 +386,12 @@ export default function KanbanPage() {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
                     const r = await fetch(`/api/columns?boardId=${activeBoard.id}`, { cache: 'no-store' });
-                    if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                    if (r.status === 403) { push('Viewer: read-only permission'); return; }
                     if (!r.ok) throw new Error(`GET /columns ${r.status}`);
                     const cols: Column[] = await r.json();
                     for (const c of cols) {
                         const del = await fetch(`/api/columns/${c.id}`, { method: 'DELETE' });
-                        if (del.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                        if (del.status === 403) { push('Viewer: read-only permission'); return; }
                     }
                     push('All columns deleted');
                     await load();
@@ -411,7 +412,7 @@ export default function KanbanPage() {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
                     const r = await fetch(`/api/issues/${id}`, { method: 'DELETE' });
-                    if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                    if (r.status === 403) { push('Viewer: read-only permission'); return; }
                     if (!r.ok) throw new Error(`Delete issue failed: ${r.status}`);
                     push('Issue deleted');
                     await load();
@@ -546,7 +547,7 @@ export default function KanbanPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ boardId: activeBoard.id, columnIds }),
                 });
-                if (r.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                if (r.status === 403) { push('Viewer: read-only permission'); return; }
                 push('Columns reordered');
                 await load();
                 return;
@@ -617,7 +618,7 @@ export default function KanbanPage() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ issueIds: toIds }),
                     });
-                    if (r1.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                    if (r1.status === 403) { push('Viewer: read-only permission'); return; }
                 } else {
                     const [r1, r2] = await Promise.all([
                         fetch(`/api/columns/${toColId}/reorder`, {
@@ -631,7 +632,7 @@ export default function KanbanPage() {
                             body: JSON.stringify({ issueIds: fromIds }),
                         }),
                     ]);
-                    if (r1.status === 403 || r2.status === 403) { push('Viewer: read-only 권한입니다'); return; }
+                    if (r1.status === 403 || r2.status === 403) { push('Viewer: read-only permission'); return; }
                 }
 
                 push('Reordered');
@@ -708,6 +709,8 @@ export default function KanbanPage() {
                         <button onClick={load} className={btn}>
                             Refresh
                         </button>
+
+                        <RoleBadge />
                     </div>
                 </header>
 
