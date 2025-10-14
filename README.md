@@ -1,274 +1,408 @@
 # Portfolio PMS — Project Management System
-- A Kanban-based PMS designed for remote/collaborative teams, built with Next.js + NestJS + Prisma + PostgreSQL/Redis.
-  
+
+A Kanban-based PMS designed for remote/collaborative teams. Built with **Next.js 15 (App Router, Tailwind)** and **NestJS 11 + Prisma**, backed by **PostgreSQL 16** and **Redis 7**. Authentication via **NextAuth v5 (GitHub OAuth)** with a **JWT session** that exposes an `apiToken` for API calls. Role-based access control (RBAC) supports **OWNER / ADMIN / MEMBER / VIEWER**.
+
+> [PLACEHOLDER – HERO IMAGE]  
+> Add a clean product screenshot (Kanban board + header with role badge).
+
+> [PLACEHOLDER – SHORT DEMO VIDEO/GIF]  
+> 30–60s demo: sign in → role badge in header → drag & drop → 401/403 banners.
+
+---
+
+## Contents
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [Auth & RBAC](#auth--rbac)
+  - [GitHub OAuth App Setup](#github-oauth-app-setup)
+  - [NextAuth Token Injection Flow](#nextauth-token-injection-flow)
+  - [Permission Matrix](#permission-matrix)
+  - [Test Scenarios](#test-scenarios)
+  - [Seed Helper (CLI)](#seed-helper-cli)
+- [Kanban UX](#kanban-ux)
+- [API Overview](#api-overview)
+- [Docker (local build)](#docker-local-build)
+- [Troubleshooting](#troubleshooting)
+- [Change History (highlights)](#change-history-highlights)
+
+---
+
 ## Features
-- [x] Dockerized PostgreSQL 16 / Redis 7
-- [x] Prisma schema & migrations
-- [x] Health checks: /health, /health/db
-- [x] Kanban board
-  - Drag & drop cards within/between columns
-  - Horizontal column drag & drop
+- ✅ **Full-stack monorepo** (Turborepo + pnpm)
+- ✅ **Dockerized** PostgreSQL 16 / Redis 7
+- ✅ **Prisma** schema & migrations
+- ✅ **Health checks**: `/health`, `/health/db`
+- ✅ **Kanban board**
+  - Drag & drop issues within/between columns
+  - Horizontal drag & drop of columns
   - Create / Rename / Delete columns
   - Create / Rename / Delete issues
   - Deterministic ordering persisted in DB
   - **Multi-board select** (merge view or single-board focus)
-  - **Bulk:** Clear all columns & issues of the active board
-- [x] Boards/Columns/Issues CRUD (NestJS + Prisma)
-- [x] Frontend API integration (App Router) and health dashboard
-- [x] **UI v2:** Tailwind design tokens, header/actions polish, button/input/card primitives
-- [x] Dev proxy rewrites for API (`/api/*`, `/boards/*`, `/columns/*`, `/issues/*`)
-- [x] Docker build (web/api) — Next.js standalone build, NestJS dist
-- [x] Auth (GitHub via NextAuth) & minimal RBAC (GET open; write requires JWT)
-- [ ] Audit log & activity feed
-- [ ] CI/CD & deployment
+  - **Bulk**: clear all columns & issues of the active board
+- ✅ **Boards/Columns/Issues CRUD** (NestJS + Prisma)
+- ✅ **Frontend integration** (App Router) + health dashboard
+- ✅ **UI v2**: Tailwind tokens, polished header/actions, button/input/card primitives
+- ✅ **Dev rewrites** for API (`/api/*`, `/boards/*`, `/columns/*`, `/issues/*`)
+- ✅ **Auth (GitHub via NextAuth)**
+- ✅ **RBAC**: OWNER/ADMIN/MEMBER/VIEWER
+  - Viewer read-only gating (buttons disabled, DnD blocked)
+  - Role badge in header (color-coded)
+  - 401/403 UX polish: sticky re-auth banner, subtle 403 banner
+  - Standardized toasts (English)
+- ✅ **Fetch wrapper**: injects `Authorization: Bearer <apiToken>` on non-GET; emits 401/403 events
+- ✅ **Seed helper (CLI)**: role grant/demote by email; CSV bulk
+- ⏳ Audit log & activity feed
+- ⏳ CI/CD & deployment
+
+
+---
+
+## Tech Stack
+- **Frontend**: Next.js 15 (App Router), TypeScript, Tailwind
+- **Backend**: NestJS 11, TypeScript, Prisma
+- **DB/Cache**: PostgreSQL 16, Redis 7 (Docker)
+- **Auth**: NextAuth v5 (GitHub OAuth), JWT session
+- **RBAC**: OWNER / ADMIN / MEMBER / VIEWER
+- **Tooling**: pnpm, Turborepo
+
+---
 
 ## Architecture
-- **Frontend:** Next.js (App Router, TS, Tailwind)
-- **Dev rewrites:** `/api/*`, `/boards/*`, `/columns/*`, `/issues/*` → `${NEXT_PUBLIC_API_BASE}` (default: `http://localhost:3001`)
-- **Backend:** NestJS (TypeScript) + Prisma
-- **DB/Cache:** PostgreSQL 16, Redis 7 (Docker)
-- **Repo:** pnpm + Turborepo monorepo
-~~~text
+```text
 apps/
-  web/   # Next.js
-  api/   # NestJS + Prisma
+  web/   (Next.js 15, App Router, Tailwind)
+  api/   (NestJS 11 + Prisma)
 infra/
   docker-compose.yml
 pnpm-workspace.yaml
 turbo.json
-~~~
+```
 
-## Docker (build only)
-> Local image build only (deployment out of scope).
+- **Dev rewrites** (web):
+  - `/api/*`, `/boards/*`, `/columns/*`, `/issues/*` → `${NEXT_PUBLIC_API_BASE}` (default: `http://localhost:3001`)
 
-~~~text
-# from repo root
-docker build -f apps/web/Dockerfile -t pms-web:local .
-docker build -f apps/api/Dockerfile -t pms-api:local .
+> [PLACEHOLDER – ARCHITECTURE DIAGRAM]  
+> Simple diagram: Web (Next.js) → API (NestJS) → PostgreSQL/Redis. Show OAuth → session (apiToken) → Authorization header flow.
 
-# Notes
-Web container exposes 3000
-API container exposes 4000 (dev server runs on 3001)
-~~~
+---
+
+## Quick Start
+```bash
+pnpm i
+cp .env.example .env   # or fill both apps/web/.env.local and apps/api/.env as below
+pnpm -w dev            # web on :3000, api on :3001
+```
+- Web: http://localhost:3000  
+- API: http://localhost:3001
+
+Health checks:
+```bash
+curl -s http://localhost:3001/health
+curl -s http://localhost:3001/health/db
+```
+
+---
 
 ## Environment Variables
-- **apps/web/.env.local**
-~~~text
+
+**apps/web/.env.local**
+```text
 NEXT_PUBLIC_WORKSPACE_ID=ws_local
 NEXT_PUBLIC_API_BASE=http://localhost:3001
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=replace-with-32+chars
 GITHUB_ID=<your_github_oauth_client_id>
 GITHUB_SECRET=<your_github_oauth_client_secret>
-~~~
-- **apps/api/.env**
-~~~text
+```
+
+**apps/api/.env**
+```text
 DATABASE_URL=postgresql://app:app@127.0.0.1:5432/appdb?schema=public
 REDIS_URL=redis://localhost:6379
 PORT=3001
-
-# must match web's value
 NEXTAUTH_SECRET=replace-with-32+chars
-~~~
+```
+- `NEXTAUTH_SECRET` must match between web & api.
+- `NEXT_PUBLIC_API_BASE` is used by the web dev proxy rewrites.
 
-## Run
-~~~text
-pnpm i
-pnpm -r dev
-~~~
-- Web: http://localhost:3000
-- API: http://localhost:3001
-- Health checks:
-~~~text
-curl -s http://localhost:3001/health
-curl -s http://localhost:3001/health/db
+---
 
-Dev proxy note: apps/web/next.config.ts proxies
-/api/*, /boards/*, /columns/*, /issues/* to ${NEXT_PUBLIC_API_BASE}.
-If you change this value, restart the web dev server.
-~~~
+## Auth & RBAC
 
-## Auth & Minimal RBAC
-- **Login**: GitHub OAuth via NextAuth (`/api/auth/[...nextauth]`)
-- **Session**: JWT strategy; session includes `userId` and `apiToken` (HS256, `NEXTAUTH_SECRET`)
-- **User upsert**: On successful OAuth, web calls `POST /auth/upsert { email, name?, image? }` to create/update a User
-- **Route guard (web)**: `/kanban` requires auth; unauthenticated users are redirected to `/login`
-- **Write protection (API)**: Global guard
-  - `GET`/`HEAD`/`OPTIONS` → allowed without token
-  - `POST`/`PATCH`/`DELETE` → require `Authorization: Bearer <apiToken>`
-- **Bearer injection (web)**: Non-GET fetches automatically attach `Authorization` from session
+### GitHub OAuth App Setup
+1. GitHub → Settings → Developer settings → **OAuth Apps** → **New OAuth App**
+2. Homepage URL: `http://localhost:3000`
+3. Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
+4. Save and copy **Client ID** and **Client Secret** to `apps/web/.env.local`.
 
-**GitHub OAuth setup**
-- OAuth App → Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
-- Copy **Client ID** → `GITHUB_ID`, generate **Client Secret** → `GITHUB_SECRET`
+### NextAuth Token Injection Flow
+1. User logs in via GitHub OAuth.
+2. NextAuth creates a **JWT session** that includes `apiToken` (signed with `NEXTAUTH_SECRET`).
+3. The web fetch wrapper (`apiFetch`) adds `Authorization: Bearer <apiToken>` to **non-GET** requests.
+4. The API verifies the token and enforces **RBAC** via `JwtAuthGuard` + `ScopedRolesGuard`.
+5. On `401` or `403`, the wrapper emits events:
+   - `401`: top sticky banner with **Sign in again**.
+   - `403`: subtle banner; no duplicate toasts.
 
-## Kanban (Web)
-- URL: `http://localhost:3000/kanban`
-- Requires: `NEXT_PUBLIC_WORKSPACE_ID`, `NEXT_PUBLIC_API_BASE`
-- Board picker:
-  - Click “Boards: N selected” to multi-select boards
-  - **Single-board mode** enables column DnD (left↔right)
-  - Issue DnD is always available (within column up/down and cross-column)
-- New Board:
-  - “New Board…” creates a board in the current workspace
-    
-### Header actions
-- **Boards: N selected** — open board picker (multi-select)
-- **New Board…** — create a board in current workspace
-- **Delete Board…** — delete active board (option: cascade)
-- **Clear Columns…** — bulk delete all columns & issues in the active board
-- **Refresh** — reload boards/columns/issues
+### Permission Matrix
+| Resource \ Action     | Read | Create | Update | Delete | Reorder | Bulk Clear | Delete Board (cascade) |
+|------------------------|:----:|:------:|:-----:|:------:|:-------:|:----------:|:-----------------------:|
+| **OWNER**              |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
+| **ADMIN**              |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
+| **MEMBER**             |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ❌            |
+| **VIEWER**             |  ✅  |   ❌   |   ❌  |   ❌   |   ❌    |     ❌     |           ❌            |
 
-## UI v2 (Tailwind v4)
-Design tokens & primitives used across the app.
-- **Tokens:** `brand`, `surface.{0,1,2}`, `text.{DEFAULT,mute}`, `danger/ok/warn`
-- **Radii & Shadows:** `rounded-xl/2xl`, `shadow-card/overlay`
-- **Primitives:** `.btn`, `.btn-primary`, `.btn-ghost`, `.btn-danger`, `.input`, `.card`, `.section`, `.badge-*`
-- **Header:** “Kanban — Project Management System”, visible labels for **New Board…**, **Delete Board…**, **Clear Columns…**, **Refresh**
+### Test Scenarios
+- **OWNER vs VIEWER**
+  - Owner: create board/columns/issues; drag columns and issues; bulk clear; cascade delete board.
+  - Viewer: cannot create/rename/delete; DnD blocked; attempting write shows **403 banner**.
+- **Session Expiry (401)**
+  - Invalidate session; attempt a write → **401** re-auth banner with **Sign in again**.
 
-## Behavior
-- Column DnD (single-board mode only)
-  - Uses @dnd-kit/core + @dnd-kit/sortable (closestCenter, rectSortingStrategy)
-  - On drop, compute the board’s column ID array and POST /columns/reorder { boardId, columnIds }
-  - Optimistic UI first, then server sync
+### Seed Helper (CLI)
+Grant/demote roles by email, or bulk via CSV.
 
-- Issue DnD
-  - Same column: POST /columns/:id/reorder { issueIds }
-  - Cross-column: reorder both target and source columns
-  - Sorting rule: (order ASC, createdAt ASC)
-  - Optimistic UI first, then server sync
+**File**: `apps/api/scripts/role.js`  
+**Usage**
+```bash
+node scripts/role.js set <email> <ROLE>     # ROLE ∈ OWNER|ADMIN|MEMBER|VIEWER
+node scripts/role.js bulk ./emails.csv      # CSV: "email,ROLE", header optional
+```
+**Package scripts (apps/api/package.json)**
+```json
+{
+  "scripts": {
+    "role": "node scripts/role.js",
+    "role:set": "node scripts/role.js set",
+    "role:bulk": "node scripts/role.js bulk"
+  }
+}
+```
 
-- Delete semantics
-  - DELETE /issues/:id, /columns/:id, /boards/:id return **204 No Content**
-  - Boards support `?cascade=true`
-  - 
+---
+
+## Kanban UX
+- **URL**: `/boards` (or your route)
+- **Board picker**: “Boards: N selected” for multi-select  
+  - Single-board mode enables **column DnD (left↔right)**  
+  - Issue DnD works in single- and multi-board views
+- **Role badge**: header-right shows current role (color-coded)
+- **Write actions**: `requires-write` elements disabled for Viewer
+- **Banners**
+  - `401` expired session → sticky top banner with **Sign in again**
+  - `403` insufficient role → subtle banner; no duplicate toasts
+
+> [PLACEHOLDER – KANBAN SCREENSHOT]  
+> Board picker open + role badge visible + issue DnD hint.
+
+---
 
 ## API Overview
-- Boards
-  - GET /boards?workspaceId=...
-  - GET /boards/:id
-  - GET /boards/:id/full
-  - POST /boards
-  - PATCH /boards/:id
-  - DELETE /boards/:id[?cascade=true]  ← returns 204
-- Columns
-  - GET /columns?boardId=...
-  - POST /columns
-  - PATCH /columns/:id
-  - DELETE /columns/:id  ← returns 204
-  - POST /columns/:id/reorder
-    - Body: { "issueIds": ["<issue-id-1>", ...] }
-  - POST /columns/reorder
-    - Body: { "boardId": "<board-id>", "columnIds": ["<col-id-1>", ...] }
-- Issues
-  - GET /issues?workspaceId=...&columnId=...
-  - POST /issues
-  - PATCH /issues/:id
-  - DELETE /issues/:id  ← returns 204
+- **Boards**
+  - `GET /boards?workspaceId=...`
+  - `GET /boards/:id`
+  - `GET /boards/:id/full`
+  - `POST /boards`
+  - `PATCH /boards/:id`
+  - `DELETE /boards/:id[?cascade=true]`
+- **Columns**
+  - `GET /columns?boardId=...`
+  - `POST /columns`
+  - `PATCH /columns/:id`
+  - `DELETE /columns/:id`
+  - `POST /columns/:id/reorder` `{ "issueIds": string[] }`
+  - `POST /columns/reorder` `{ "boardId": string, "columnIds": string[] }`
+- **Issues**
+  - `GET /issues?workspaceId=...&columnId=...`
+  - `POST /issues`
+  - `PATCH /issues/:id`
+  - `DELETE /issues/:id`
+- **Health**
+  - `GET /health`, `GET /health/db`
 
-## Deletion Policy
-| Relation            | onDelete | Rationale                              |
-|---------------------|---------:|-----------------------------------------|
-| Issue → BoardColumn | CASCADE  | Deleting a column removes its issues    |
-| Comment → Issue     | CASCADE  | Deleting an issue removes its comments  |
-| BoardColumn → Board | RESTRICT | Safer default; cascade via API opt-in   |
+---
 
-### DELETE Responses
-- DELETE /issues/:id → **204 No Content**. Compacts `order` among remaining siblings.
-- DELETE /columns/:id → **204 No Content**. Issues removed via DB CASCADE.
-- DELETE /boards/:id → RESTRICT by default; `?cascade=true` → **204 No Content** to remove columns/issues.
+## Docker (local build)
+Local image builds (deployment out of scope).
+```bash
+docker build -f apps/web/Dockerfile -t pms-web:local .
+docker build -f apps/api/Dockerfile -t pms-api:local .
+# web exposes 3000; api exposes 4000 (dev server runs on 3001)
+```
 
-## Deterministic Ordering (Server)
-- Columns sorted by order ASC
-- Issues sorted by (order ASC, createdAt ASC)
-- POST /columns/reorder: validates boardId/columnIds and updates within a transaction
-- PATCH /issues/:id: when moving to a new column, assigns the next order in that column
+---
 
-## Verification Snippets (curl)
-~~~text
-# 1) workspace/board
-WS=$(grep -oE '^NEXT_PUBLIC_WORKSPACE_ID=.*' apps/web/.env.local | cut -d= -f2)
-curl -s "http://localhost:3001/boards?workspaceId=$WS" | jq
-BOARD_ID=$(curl -s "http://localhost:3001/boards?workspaceId=$WS" | jq -r '.[0].id')
+## Troubleshooting (Extended)
 
-# 2) list columns (by order)
-curl -s "http://localhost:3001/columns?boardId=$BOARD_ID" \
-  | jq -r 'sort_by(.order) | .[] | "\(.order)\t\(.name)\t\(.id)"'
+Below are the most common issues organized by area. Each item includes checks and fixes you can copy/paste.
 
-# 3) reverse columns
-REV=$(curl -s "http://localhost:3001/columns?boardId=$BOARD_ID" \
-  | jq -c 'sort_by(.order) | [.[].id] | reverse')
+---
 
-curl -i -X POST "http://localhost:3001/columns/reorder" \
-  -H "content-type: application/json" \
-  -d "{\"boardId\":\"$BOARD_ID\",\"columnIds\":$REV}"
+### 1) Setup & Environment
+- **Wrong env file loaded**
+  - Confirm paths:
+    - Web: `apps/web/.env.local`
+    - API: `apps/api/.env`
+  - Restart dev servers after any env change.
+- **Generate a strong secret**
+  ```bash
+  openssl rand -base64 48 | tr -d '\n'
+  ```
+  Set the value to **both** `NEXTAUTH_SECRET` (web & api).
+- **Timezone / clock drift**
+  - Large time drift breaks JWT validation. Sync your clock (e.g., macOS: `sudo sntp -sS time.apple.com`).
 
-# 4) reorder issues inside a column
-COL_ID=$(curl -s "http://localhost:3001/columns?boardId=$BOARD_ID" | jq -r '.[0].id')
-ISS_LIST=$(curl -s "http://localhost:3001/columns?boardId=$BOARD_ID" \
-  | jq -c '.[] | select(.id=="'"$COL_ID"'") | .issues | [.[].id]')
-curl -i -X POST "http://localhost:3001/columns/$COL_ID/reorder" \
-  -H "content-type: application/json" \
-  -d "{\"issueIds\":$ISS_LIST}"
+---
 
-# 5) delete issue (204 expected)
-IID=$(curl -sS -X POST http://localhost:3001/issues \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"tmp","workspaceId":"'"$WS"'"}' | jq -r .id)
-curl -s -o /dev/null -w "%{http_code}\n" -X DELETE "http://localhost:3001/issues/$IID"  # 204
+### 2) Auth / OAuth / NextAuth
+- **Callback URL mismatch**
+  - GitHub OAuth → Authorization callback must be exactly:
+    - `http://localhost:3000/api/auth/callback/github`
+- **401 on write**
+  - Confirm you’re signed in and session has `apiToken`:
+    - Browser DevTools → Application → Session storage or call `GET /api/auth/session` in the web app.
+  - `NEXTAUTH_SECRET` must be identical in both web and api.
+  - Check the request has `Authorization: Bearer <token>`
+    - DevTools → Network → your POST/PATCH/DELETE → Headers.
+- **Login loops / redirects to /auth/error**
+  - Clear site data/cookies and retry.
+  - Ensure web rewrites do **not** proxy `"/api/auth/*"` to the backend.
+- **Enable verbose logs**
+  ```bash
+  # web
+  NEXTAUTH_DEBUG=true pnpm -C apps/web dev
+  # api
+  LOG_LEVEL=debug pnpm -C apps/api start:dev
+  ```
 
-# 6) delete board cascade (204 expected)
-curl -s -o /dev/null -w "%{http_code}\n" -X DELETE "http://localhost:3001/boards/$BOARD_ID?cascade=true"  # 204
-~~~
+---
 
-## Test (API e2e)
-~~~text
-cd apps/api
-pnpm run test:e2e
-# or a single file:
-pnpm run test:e2e:path
-~~~
+### 3) RBAC / Permissions
+- **Viewer cannot write**
+  - This is expected. Promote your email:
+  ```bash
+  pnpm -C apps/api run role:set you@example.com OWNER
+  ```
+- **403 without banner**
+  - Ensure the fetch wrapper emits `auth:403` and the `AuthBanners` component is mounted at layout root.
+- **Role badge missing**
+  - The header calls `/api/me` with `cache:'no-store'`. Verify endpoint returns `{ email, userId, role }`.
+- **Buttons still clickable for Viewer**
+  - UI checks `requires-write` class + `readOnly` flag from `useRBAC`. Confirm the hook returns `canWrite=false`.
 
-## Troubleshooting
-- 400 columnIds is required
-  - Guard against empty payloads in the frontend before calling /columns/reorder.
-  - Ensure data-col-id exists and the drag start sets the __COLUMN__:<id> token.
-- GET /boards?workspaceId=... returns 404 or empty
-  - NEXT_PUBLIC_WORKSPACE_ID must exist in DB; create a board/columns first if needed.
-- Port in use (EADDRINUSE)
-  - lsof -nP -iTCP:3001 -sTCP:LISTEN and kill the process.
-- Prisma schema problems
-  - pnpm prisma format && pnpm prisma validate
-  - Migrations: pnpm prisma migrate deploy (or pnpm prisma db push for early dev)
-- TypeScript strict errors (e.g., TS2339 on never)
-  - Add explicit generics to arrayMove/map/find
-  - Initialize state with typed empty arrays, e.g. useState<Type[]>([])
-  - In setState reducers, clone with typed maps: prev.map<T>(...) to avoid never narrowing
-- Dev 404 / ECONNREFUSED
-  - Symptoms: 404 or proxy failure on `/boards`, `/columns`, `/issues`
-  - Checklist:
-    1) API is running (`PORT=3001`)
-    2) `apps/web/.env.local` → `NEXT_PUBLIC_API_BASE=http://localhost:3001`
-    3) Restart web dev server (`pnpm -C apps/web dev`)
-    4) Confirm rewrites are applied in `apps/web/next.config.ts`
-- Redirect to /auth/error or 404
-  - Ensure `apps/web/next.config.ts` does **not** proxy `/api/auth/*`.
-  - GitHub OAuth callback must be exactly: `http://localhost:3000/api/auth/callback/github`.
-- Write ops return 401
-  - Login first; confirm `apiToken` exists in session.
-  - Check request headers include `Authorization: Bearer <...>`.
-  - API must have `NEXTAUTH_SECRET` equal to web’s value.
-- Still proxying to backend for /api/auth/
-  - Restart web dev server after changing rewrites: `rm -rf apps/web/.next && pnpm -C apps/web dev`.
-- CORS preflight blocked
-  - API allows `OPTIONS/HEAD`; ensure your browser shows 200/204 for preflight.
- 
-### util._extend Deprecation Warning
-- Next dev warning; harmless and can be ignored. 
+---
 
-## Change History (Summary)
-- Optimistic UI with server synchronization
-- Eliminated setState timing races by sending IDs from a local snapshot
-- Unified drop-index calculation by midpoint for both columns and issues
-- API guarantees deterministic listing and transactional reorders
-- Delete policies (CASCADE/RESTRICT) + 204 responses on DELETE
+### 4) API & Proxy (Dev)
+- **Dev rewrites not applied**
+  - `NEXT_PUBLIC_API_BASE` must be `http://localhost:3001`.
+  - After changing, restart dev server:
+    ```bash
+    rm -rf apps/web/.next && pnpm -C apps/web dev
+    ```
+- **CORS / Preflight blocked**
+  - API allows `OPTIONS/HEAD`. Verify you are calling the API through the same origin (`/boards`, `/columns`, `/issues`) instead of absolute cross-origin URLs in dev.
+- **Network 404 but API is running**
+  - Inspect Next.js `rewrites()` in `apps/web/next.config.ts` and make sure patterns include `/boards/*`, `/columns/*`, `/issues/*`, `/api/*` (excluding `/api/auth/*`).
+
+---
+
+### 5) Database / Prisma
+- **Cannot connect to database**
+  - Check `DATABASE_URL` and that Postgres is running (Docker or local).
+- **Migrations / schema drift**
+  ```bash
+  pnpm -C apps/api prisma format
+  pnpm -C apps/api prisma validate
+  pnpm -C apps/api prisma migrate deploy   # or: prisma db push (early dev)
+  ```
+- **Prisma Client not generated**
+  ```bash
+  pnpm -C apps/api prisma generate
+  ```
+- **Pool exhausted / too many connections**
+  - Use a smaller pool in dev: append `?connection_limit=5` (for PG 15+) or manage via PG config.
+
+---
+
+### 6) Kanban UI & DnD
+- **Drag & drop not working**
+  - If role is VIEWER, DnD is intentionally blocked.
+  - Confirm DnD container uses `closestCenter` and `rectSortingStrategy` and the page state has items with stable `id`.
+- **Columns not reordering after drop**
+  - Network tab should show `POST /columns/reorder`. If absent, check column `id`s and active board.
+- **Issues not reordering after cross-column move**
+  - Both `POST /columns/:toId/reorder` and `POST /columns/:fromId/reorder` should fire.
+- **Toast duplicates on 403**
+  - The UI uses a banner + standardized toast. Ensure only the **event-based** banner runs; remove ad-hoc toasts in handlers.
+
+---
+
+### 7) Seed Helper (CLI)
+- **Command not found**
+  - Ensure `apps/api/package.json` has scripts:
+  ```json
+  { "scripts": { "role": "node scripts/role.js", "role:set": "node scripts/role.js set", "role:bulk": "node scripts/role.js bulk" } }
+  ```
+- **CSV format**
+  - Either `email,ROLE` header or none. Example:
+  ```csv
+  email,role
+  alice@example.com,ADMIN
+  bob@example.com,VIEWER
+  ```
+
+---
+
+### 8) Docker (local build)
+- **Images build but won’t run**
+  - These images are for local build verification only. For runtime, wire up `docker-compose` (DB/Redis) and provide envs.
+- **Port conflicts**
+  ```bash
+  lsof -nP -iTCP:3000 -sTCP:LISTEN
+  lsof -nP -iTCP:3001 -sTCP:LISTEN
+  lsof -nP -iTCP:4000 -sTCP:LISTEN
+  ```
+
+---
+
+### 9) Common HTTP Errors (Cheat Sheet)
+| Code | Where | Meaning | Fix |
+|-----:|------|---------|-----|
+| 401 | API | Missing/invalid `apiToken` | Log in; ensure `Authorization: Bearer <token>` is present; secrets match |
+| 403 | API | Role not allowed | Promote role; or switch account |
+| 404 | API | Resource not found | Verify IDs/workspace; check rewrite path |
+| 409 | API | Board delete restricted | Use `?cascade=true` or delete columns first |
+| 422 | API | Payload invalid | Check required fields (`title`, `workspaceId`, etc.) |
+| 500 | API | Server error (Prisma, etc.) | Check API logs; validate DB connection/migrations |
+
+---
+
+### 10) Production Notes (if you deploy later)
+- Build:
+  ```bash
+  pnpm -C apps/web build && pnpm -C apps/web start
+  pnpm -C apps/api build && pnpm -C apps/api start:prod
+  ```
+- Set absolute origins:
+  - `NEXTAUTH_URL=https://your-domain`
+  - Update GitHub OAuth callback to the production URL.
+- Ensure HTTPS and correct cookie domain; clock skew will break JWT.
+  
+---
+
+## Change History (highlights)
+- Role badge in header with `/api/me` (no-store)
+- Viewer read-only gating + DnD block
+- Fetch wrapper with Bearer injection (non-GET) + 401/403 events
+- 401/403 UX banners (sticky re-auth, subtle 403)
+- Board delete 409 vs cascade path
+- Role Seed CLI (set/bulk)
+
+---
+
+## License
+MIT
