@@ -1,33 +1,14 @@
-
 # Portfolio PMS — Project Management System
 
-<p align="center">
-  <a href="https://YOUR_WEB_URL" target="_blank" rel="noopener">
-    <img alt="Open Demo" src="https://img.shields.io/badge/Open%20Demo-live-green?style=for-the-badge">
-  </a>
-  <a href="https://YOUR_WEB_URL/demo.mp4" target="_blank" rel="noopener" style="margin-left:8px">
-    <img alt="Watch 1-min demo" src="https://img.shields.io/badge/Watch-1%E2%80%91min%20demo-000?style=for-the-badge">
-  </a>
-</p>
+> **Elevator pitch**: A lightweight Kanban PMS with issue DnD and RBAC — optimized reorder transactions and polished 401/403 UX.
 
-**Demo accounts (GitHub OAuth, role by email)**
+https://github.com/user-attachments/assets/c961bab4-b7ba-4510-b16b-701a1e9ebf87
 
-| Role   | Email               | How to seed / promote                                     |
-|--------|---------------------|-----------------------------------------------------------|
-| OWNER  | owner@example.com   | `pnpm -C apps/api run role:set owner@example.com OWNER`  |
-| VIEWER | viewer@example.com  | `pnpm -C apps/api run role:set viewer@example.com VIEWER`|
-
-A Kanban-based PMS designed for remote/collaborative teams. Built with **Next.js 15 (App Router, Tailwind)** and **NestJS 11 + Prisma**, backed by **PostgreSQL 16** and **Redis 7**. Authentication via **NextAuth v5 (GitHub OAuth)** with a **JWT session** that exposes an `apiToken` for API calls. Role-based access control (RBAC) supports **OWNER / ADMIN / MEMBER / VIEWER**.
-
-> Replace placeholders with your assets:
-> - Put a hero screenshot at `apps/web/public/images/kanban-hero.png` and link it below.
-> - Put a second board screenshot at `apps/web/public/images/kanban-boards.png`.
-> - Put your short demo clip at `apps/web/public/demo.mp4` and update the button URL above (`/demo.mp4`).
+A Kanban-based PMS designed for remote/collaborative teams. Built with **Next.js 15 (App Router, Tailwind)** and **NestJS 11 + Prisma**, backed by **PostgreSQL 16** and **Redis 7**. Authentication via **NextAuth v4 (GitHub OAuth)** with a **JWT session** that exposes an `apiToken` for API calls. Role-based access control (RBAC) supports **OWNER / ADMIN / MEMBER / VIEWER**.
 
 ---
 
 ## Contents
-- [Live Demo & Accounts](#live-demo--accounts)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
@@ -42,8 +23,7 @@ A Kanban-based PMS designed for remote/collaborative teams. Built with **Next.js
 - [Kanban UX](#kanban-ux)
 - [API Overview](#api-overview)
 - [Docker (local build)](#docker-local-build)
-- [Troubleshooting](#troubleshooting-extended)
-- [Security & Limitations](#security--limitations)
+- [Troubleshooting](#troubleshooting)
 - [Change History (highlights)](#change-history-highlights)
 - [License](#license)
 
@@ -82,13 +62,14 @@ A Kanban-based PMS designed for remote/collaborative teams. Built with **Next.js
 - **Frontend**: Next.js 15 (App Router), TypeScript, Tailwind
 - **Backend**: NestJS 11, TypeScript, Prisma
 - **DB/Cache**: PostgreSQL 16, Redis 7 (Docker)
-- **Auth**: NextAuth v5 (GitHub OAuth), JWT session
+- **Auth**: NextAuth v4 (GitHub OAuth), JWT session
 - **RBAC**: OWNER / ADMIN / MEMBER / VIEWER
 - **Tooling**: pnpm, Turborepo
 
 ---
 
 ## Architecture
+
 ```text
 apps/
   web/   (Next.js 15, App Router, Tailwind)
@@ -99,23 +80,92 @@ pnpm-workspace.yaml
 turbo.json
 ```
 
-- **Dev rewrites** (web):
-  - `/api/*`, `/boards/*`, `/columns/*`, `/issues/*` → `${NEXT_PUBLIC_API_BASE}` (default: `http://localhost:3001`)
+**Dev rewrites (web)**  
+Browser calls → **`/api/*`** (Next.js) → rewrites → API service routes:
 
-> <img src="apps/web/public/images/kanban-hero.png" alt="Kanban UI" width="960"/>
+- `/api/boards` → `${NEXT_PUBLIC_API_BASE}/boards`
+- `/api/columns` → `${NEXT_PUBLIC_API_BASE}/columns`
+- `/api/issues` → `${NEXT_PUBLIC_API_BASE}/issues`
+- `/api/me` → `${NEXT_PUBLIC_API_BASE}/auth/me`
+
+```mermaid
+flowchart LR
+  subgraph Web[Web (Next.js 15, App Router)]
+    UI[Kanban UI
+DnD, Role Badge, Banners]
+    Fetch[apiFetch
+(Bearer inject, 401/403 events)]
+  end
+
+  subgraph Auth[NextAuth v4 (GitHub OAuth)]
+    GH[(GitHub OAuth)]
+    Session[JWT Session
+{ userId, apiToken }]
+  end
+
+  subgraph API[NestJS 11 + Prisma]
+    Guards[JwtAuthGuard +
+ScopedRolesGuard (RBAC)]
+    Boards[/Boards/Columns/Issues/]
+  end
+
+  subgraph Data[Data Layer]
+    PG[(PostgreSQL 16)]
+    Redis[(Redis 7)]
+  end
+
+  UI --> Fetch
+  Fetch -- GET /api/auth/session --> Session
+  Fetch -- non-GET adds
+Authorization: Bearer apiToken --> API
+  Session <-- OAuth callback --> GH
+  API --> Guards
+  API --> Boards
+  Boards --> PG
+  API --> Redis
+```
 
 ---
 
-## Quick Start
+# Quick Start
+
+> **Prereqs:** Node.js 18+ (20+ recommended), **pnpm 9+**, **Docker** (optional: local DB/Redis)
+
+## 0) (Optional) Start local DB/Redis
+```bash
+docker compose -f infra/docker-compose.yml up -d
+```
+
+## 1) Install & set environment files
 ```bash
 pnpm i
-docker compose -f infra/docker-compose.yml up -d
-pnpm -w dev
+# create env files if they don't exist
+cp apps/web/.env.local.example apps/web/.env.local || true
+cp apps/api/.env.example apps/api/.env || true
 ```
+Update the values as needed:
+- **apps/web/.env.local**
+- **apps/api/.env**
+
+Notes:
+- `NEXTAUTH_SECRET` must be **identical** in web & api.
+- `NEXT_PUBLIC_API_BASE` should point to your API (default `http://localhost:3001`).
+
+## 2) Database setup
+```bash
+pnpm -C apps/api prisma migrate deploy
+pnpm -C apps/api run seed:demo
+```
+
+## 3) Run the apps
+```bash
+pnpm -w dev   # web :3000, api :3001
+```
+
 - Web: http://localhost:3000  
 - API: http://localhost:3001
 
-Health checks:
+## 4) Health checks
 ```bash
 curl -s http://localhost:3001/health
 curl -s http://localhost:3001/health/db
@@ -142,7 +192,9 @@ REDIS_URL=redis://localhost:6379
 PORT=3001
 NEXTAUTH_SECRET=replace-with-32+chars
 ```
-- `NEXTAUTH_SECRET` must match between web & api.
+
+Notes:
+- `NEXTAUTH_SECRET` must match between **web** & **api**.
 - `NEXT_PUBLIC_API_BASE` is used by the web dev proxy rewrites.
 
 ---
@@ -156,21 +208,38 @@ NEXTAUTH_SECRET=replace-with-32+chars
 4. Save and copy **Client ID** and **Client Secret** to `apps/web/.env.local`.
 
 ### NextAuth Token Injection Flow
-1. User logs in via GitHub OAuth.
-2. NextAuth creates a **JWT session** that includes `apiToken` (signed with `NEXTAUTH_SECRET`).
-3. The web fetch wrapper (`apiFetch`) adds `Authorization: Bearer <apiToken>` to **non-GET** requests.
-4. The API verifies the token and enforces **RBAC** via `JwtAuthGuard` + `ScopedRolesGuard`.
-5. On `401` or `403`, the wrapper emits events:
-   - `401`: top sticky banner with **Sign in again**.
-   - `403`: subtle banner; no duplicate toasts.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User (Browser)
+  participant W as Web (Next.js)
+  participant NA as NextAuth (GitHub)
+  participant API as API (NestJS)
+  participant DB as PostgreSQL
+
+  U->>W: Sign in with GitHub
+  W->>NA: /api/auth/callback/github
+  NA-->>W: JWT session { userId, apiToken }
+  note right of W: session exposes apiToken
+
+  U->>W: Create / Rename / Delete (non-GET)
+  W->>API: fetch (Authorization: Bearer apiToken)
+  API->>API: JwtAuthGuard verify token
+  API->>API: ScopedRolesGuard check role (OWNER/ADMIN/MEMBER/VIEWER)
+  API->>DB: CRUD / reorder in transaction
+  DB-->>API: OK
+  API-->>W: 200 (or 401/403)
+  W-->>U: Render + banners (401/403)
+```
 
 ### Permission Matrix
-| Resource \\ Action     | Read | Create | Update | Delete | Reorder | Bulk Clear | Delete Board (cascade) |
-|--------------------------|:----:|:------:|:-----:|:------:|:-------:|:----------:|:-----------------------:|
-| **OWNER**                |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
-| **ADMIN**                |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
-| **MEMBER**               |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ❌            |
-| **VIEWER**               |  ✅  |   ❌   |   ❌  |   ❌   |   ❌    |     ❌     |           ❌            |
+| Resource \ Action     | Read | Create | Update | Delete | Reorder | Bulk Clear | Delete Board (cascade) |
+|------------------------|:----:|:------:|:-----:|:------:|:-------:|:----------:|:-----------------------:|
+| **OWNER**              |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
+| **ADMIN**              |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
+| **MEMBER**             |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ❌            |
+| **VIEWER**             |  ✅  |   ❌   |   ❌  |   ❌   |   ❌    |     ❌     |           ❌            |
 
 ### Test Scenarios
 - **OWNER vs VIEWER**
@@ -185,18 +254,8 @@ Grant/demote roles by email, or bulk via CSV.
 **File**: `apps/api/scripts/role.js`  
 **Usage**
 ```bash
-node scripts/role.js set <email> <ROLE>     # ROLE ∈ OWNER|ADMIN|MEMBER|VIEWER
-node scripts/role.js bulk ./emails.csv      # CSV: "email,ROLE", header optional
-```
-**Package scripts (apps/api/package.json)**
-```json
-{
-  "scripts": {
-    "role": "node scripts/role.js",
-    "role:set": "node scripts/role.js set",
-    "role:bulk": "node scripts/role.js bulk"
-  }
-}
+pnpm -C apps/api run role:set you@example.com OWNER
+pnpm -C apps/api run role:bulk ./emails.csv  # CSV: email,ROLE
 ```
 
 ---
@@ -207,108 +266,184 @@ node scripts/role.js bulk ./emails.csv      # CSV: "email,ROLE", header optional
   - Single-board mode enables **column DnD (left↔right)**  
   - Issue DnD works in single- and multi-board views
 - **Role badge**: header-right shows current role (color-coded)
-- **Write actions**: `requires-write` elements disabled for Viewer
+- **Write actions**: `.requires-write` elements disabled for Viewer
 - **Banners**
   - `401` expired session → sticky top banner with **Sign in again**
   - `403` insufficient role → subtle banner; no duplicate toasts
 
-> <img src="apps/web/public/images/kanban-boards.png" alt="Board picker and DnD" width="960"/>
+> **Screenshots**  
+> <img width="1273" height="607" alt="Owner" src="https://github.com/user-attachments/assets/8dc5fef4-003c-47ba-81b3-66c3d05c6b01" /><br/>
+> <img width="1271" height="604" alt="Viewer" src="https://github.com/user-attachments/assets/b99f831b-167e-4179-8ead-91820ac05ae4" />
 
 ---
 
 ## API Overview
+
+> **Browser calls (through Next.js rewrites)**  
+> `/api/boards`, `/api/columns`, `/api/issues` → proxied to the API base.
+
+> **API service routes (NestJS)**  
+> `/boards`, `/columns`, `/issues`
+
 - **Boards**
-  - `GET /boards?workspaceId=...`
-  - `GET /boards/:id`
-  - `GET /boards/:id/full`
-  - `POST /boards`
-  - `PATCH /boards/:id`
-  - `DELETE /boards/:id[?cascade=true]`
+  - `GET /api/boards?workspaceId=...`
+  - `GET /api/boards/:id`
+  - `GET /api/boards/:id/full`
+  - `POST /api/boards`
+  - `PATCH /api/boards/:id`
+  - `DELETE /api/boards/:id[?cascade=true]`
 - **Columns**
-  - `GET /columns?boardId=...`
-  - `POST /columns`
-  - `PATCH /columns/:id`
-  - `DELETE /columns/:id`
-  - `POST /columns/:id/reorder` `{ "issueIds": string[] }`
-  - `POST /columns/reorder` `{ "boardId": string, "columnIds": string[] }`
+  - `GET /api/columns?boardId=...`
+  - `POST /api/columns`
+  - `PATCH /api/columns/:id`
+  - `DELETE /api/columns/:id`
+  - `POST /api/columns/:id/reorder` `{ "issueIds": string[] }`
+  - `POST /api/columns/reorder` `{ "boardId": string, "columnIds": string[] }`
 - **Issues**
-  - `GET /issues?workspaceId=...&columnId=...`
-  - `POST /issues`
-  - `PATCH /issues/:id`
-  - `DELETE /issues/:id`
+  - `GET /api/issues?workspaceId=...&columnId=...`
+  - `POST /api/issues`
+  - `PATCH /api/issues/:id`
+  - `DELETE /api/issues/:id`
 - **Health**
   - `GET /health`, `GET /health/db`
 
 ---
 
 ## Docker (local build)
-Local image builds (deployment out of scope).
+
 ```bash
 docker build -f apps/web/Dockerfile -t pms-web:local .
 docker build -f apps/api/Dockerfile -t pms-api:local .
-# web exposes 3000; api exposes 4000 (dev server runs on 3001)
+# web exposes :3000; api exposes :3001 (configurable via PORT)
 ```
 
 ---
 
-## Troubleshooting (Extended)
+# Troubleshooting (Extended)
 
-### Live demo 503: `MIDDLEWARE_RUNTIME_DEPRECATED` (Vercel)
-- Remove legacy Edge `middleware.ts` or refactor it to Node.js runtime.
-- Ensure Next.js >= 15 and no experimental Edge middleware is enabled.
-- Redeploy after removing/renaming `apps/web/src/middleware.ts` (if present).
-
-### Setup & Environment
-- Wrong env file path → web: `apps/web/.env.local`, api: `apps/api/.env`
-- Restart dev servers after env change.
-- Strong secret for both sides:
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-### Auth / OAuth / NextAuth
-- Callback must be exactly `http://localhost:3000/api/auth/callback/github` (prod는 Vercel URL)
-- 401 on write → login + check `Authorization: Bearer <token>`
-- Avoid proxying `/api/auth/*` via rewrites
-
-### RBAC / Permissions
-- Viewer cannot write by design → promote with Seed CLI
-- 403 banner requires fetch wrapper events + `AuthBanners` mount
-- Role badge fetches `/api/me` with `cache:'no-store'`
-
-### API & Proxy
-- `NEXT_PUBLIC_API_BASE=http://localhost:3001` in web
-- Restart dev server after change:
-```bash
-rm -rf apps/web/.next && pnpm -C apps/web dev
-```
-
-### Database / Prisma
-```bash
-pnpm -C apps/api prisma format
-pnpm -C apps/api prisma validate
-pnpm -C apps/api prisma migrate deploy
-```
-
-### Kanban UI & DnD
-- VIEWER blocks DnD
-- Column reorder → `POST /columns/reorder`
-- Issue cross-column move → reorder both columns
-
-### Common HTTP Errors
-| Code | Meaning | Fix |
-|-----:|--------|-----|
-| 401  | Missing/invalid token | Log in; ensure Bearer header |
-| 403  | Role not allowed | Promote role |
-| 404  | Resource not found | Check IDs & rewrites |
-| 409  | Board delete restricted | Use `?cascade=true` or clean columns |
-| 422  | Invalid payload | Check required fields |
-| 500  | Server error | Inspect API logs & DB connection |
+## 1) Setup & Environment
+- **Env files**
+  - Web: `apps/web/.env.local`
+  - API: `apps/api/.env`
+  - After changing env, restart the Next.js dev server.
+- **Generate a strong secret**
+  ```bash
+  openssl rand -base64 48 | tr -d '\n'
+  ```
+  Use the same value for **NEXTAUTH_SECRET** in both web & api.
 
 ---
 
-## Security & Limitations
-Learning-focused project; **not** production-hardened. Missing: password recovery, rate limit, Sentry, WAF, privacy review, backups, zero-downtime migrations.
+## 2) Auth / NextAuth
+- **OAuth callback mismatch**
+  - GitHub OAuth → Authorization callback URL:
+    - `http://localhost:3000/api/auth/callback/github`
+- **Do NOT rewrite `/api/auth/*` to the backend**
+  - In `apps/web/next.config.ts` keep `/api/auth/:path*` on the web app (or exclude it from rewrites).
+- **401 on write**
+  - Non-GET requests must have `Authorization: Bearer <apiToken>` (added by your fetch wrapper).
+  - `NEXTAUTH_SECRET` must be identical in **web** & **api**.
+- **403 banner not showing**
+  - Ensure `AuthBanners` is mounted in the layout.
+  - Ensure your fetch wrapper emits an `auth:403` event.
+
+---
+
+## 3) Dev Proxy / Rewrites
+- **Proxy not applied**
+  - `NEXT_PUBLIC_API_BASE=http://localhost:3001`
+  - Restart dev server:
+    ```bash
+    rm -rf apps/web/.next && pnpm -C apps/web dev
+    ```
+- **CORS or absolute URL**
+  - In dev, call browser APIs via relative paths (`/api/*`), letting Next.js proxy to the backend.
+
+---
+
+## 4) Prisma / Database
+- **P3005: database not empty (baseline)**
+  - For local reset:
+    ```bash
+    pnpm -C apps/api prisma migrate reset --force --skip-seed
+    pnpm -C apps/api prisma migrate deploy
+    ```
+- **Prisma Client not generated**
+  ```bash
+  pnpm -C apps/api prisma generate
+  ```
+- **Port conflicts**
+  ```bash
+  lsof -nP -iTCP:5432 -sTCP:LISTEN
+  lsof -nP -iTCP:6379 -sTCP:LISTEN
+  kill -9 <PID>
+  ```
+
+---
+
+## 5) Seeding / Roles
+- **Quick seed (optional)**
+  ```bash
+  pnpm -C apps/api prisma migrate deploy
+  pnpm -C apps/api run seed:demo
+  ```
+- **Grant roles**
+  ```bash
+  pnpm -C apps/api run role:set you@example.com OWNER
+  pnpm -C apps/api run role:bulk ./emails.csv  # CSV: email,ROLE
+  ```
+
+---
+
+## 6) Kanban UI & DnD
+- **Drag & Drop not working**
+  - VIEWER is intentionally read-only (no writes / no DnD).
+  - Ensure each column/issue has a stable `id`.
+- **Reorder not persisted after drop**
+  - Network tab should show:
+    - Columns: `POST /api/columns/reorder`
+    - Issues:  `POST /api/columns/:id/reorder`
+
+---
+
+## 7) Tests
+- **API e2e (Jest/Supertest)**
+  - Use compatible versions (e.g., `jest@29`, `ts-jest@29`, `@types/jest@29`).
+  - Ensure `jest` config points to your e2e spec folder and uses `ts-jest`.
+- **Web e2e (Playwright)**
+  - Install `@playwright/test`.
+  - In `playwright.config.ts`, set `webServer` (to start Next dev) or set a `baseURL` to an already running server.
+  - For VIEWER case, assert `.requires-write` elements are `disabled`.
+
+---
+
+## 8) Vercel (Deploy)
+- **503: `MIDDLEWARE_RUNTIME_DEPRECATED`**
+  - Remove or rename legacy `middleware.ts` and redeploy.
+
+---
+
+## 9) Logging / Debug
+- **NextAuth debug**
+  ```bash
+  NEXTAUTH_DEBUG=true pnpm -C apps/web dev
+  ```
+- **API verbose**
+  ```bash
+  LOG_LEVEL=debug pnpm -C apps/api start:dev
+  ```
+
+---
+
+## 10) HTTP Error Cheat Sheet
+| Code | Meaning                    | Fix |
+|-----:|----------------------------|-----|
+| 401  | Missing/invalid `apiToken` | Log in; ensure `Authorization: Bearer <token>`; secrets match |
+| 403  | Insufficient role          | Promote role (OWNER/ADMIN/MEMBER) or switch account |
+| 404  | Resource not found         | Verify IDs/workspace; check rewrite path |
+| 409  | Board delete restricted    | Use `?cascade=true` or delete child resources first |
+| 422  | Invalid payload            | Check required fields (`title`, `workspaceId`, etc.) |
+| 500  | Server error               | Check API logs; DB connection; migrations |
 
 ---
 
