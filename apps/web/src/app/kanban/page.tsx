@@ -25,6 +25,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useRBAC } from '@/hooks/useRBAC';
 import RoleBadge from '@/components/role-badge';
+import AuthBanners from '@/components/auth-banners';
+import { emitAuthEvent } from '@/lib/auth-events';
+import { apiFetch } from '@/lib/fetcher';
 
 type Issue = {
     id: string;
@@ -196,8 +199,12 @@ export default function KanbanPage() {
     const jsonOrThrow = async (r: Response, fallbackMsg: string) => {
         if (r.ok) return r.json().catch(() => ({}));
         if (r.status === 403) {
-            push('Viewer: read-only permission');
+            emitAuthEvent('auth:403');
             throw new Error('FORBIDDEN');
+        }
+        if (r.status === 401) {
+            emitAuthEvent('auth:401');
+            throw new Error('UNAUTHORIZED');
         }
         throw new Error(`${fallbackMsg}: ${r.status}`);
     };
@@ -262,7 +269,7 @@ export default function KanbanPage() {
         const name = window.prompt('New board name');
         if (!name?.trim()) return;
         await withBusy('create-board', async () => {
-            const r = await fetch('/api/boards', {
+            const r = await apiFetch('/api/boards', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: name.trim(), workspaceId }),
@@ -284,7 +291,7 @@ export default function KanbanPage() {
                 boardId: activeBoard.id,
                 order: columns.filter((c) => c._board.id === activeBoard.id).length,
             };
-            const r = await fetch('/api/columns', {
+            const r = await apiFetch('/api/columns', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -304,7 +311,7 @@ export default function KanbanPage() {
         if (!title || !workspaceId) return;
         await withBusy(`create-issue:${columnId}`, async () => {
             const body = { title, workspaceId, columnId };
-            const r = await fetch('/api/issues', {
+            const r = await apiFetch('/api/issues', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -322,7 +329,7 @@ export default function KanbanPage() {
         if (readOnly) return;
         if (!name.trim()) return;
         await withBusy(`rename-col:${id}`, async () => {
-            const r = await fetch(`/api/columns/${id}`, {
+            const r = await apiFetch(`/api/columns/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: name.trim() }),
@@ -340,7 +347,7 @@ export default function KanbanPage() {
         if (readOnly) return;
         if (!title.trim()) return;
         await withBusy(`rename-issue:${id}`, async () => {
-            const r = await fetch(`/api/issues/${id}`, {
+            const r = await apiFetch(`/api/issues/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: title.trim() }),
@@ -363,8 +370,8 @@ export default function KanbanPage() {
             onYes: async () => {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
-                    const r = await fetch(`/api/columns/${id}`, { method: 'DELETE' });
-                    if (r.status === 403) { push('Viewer: read-only permission'); return; }
+                    const r = await apiFetch(`/api/columns/${id}`, { method: 'DELETE' });
+                    if (r.status === 403) { emitAuthEvent('auth:403'); return; }
                     if (!r.ok) throw new Error(`Delete column failed: ${r.status}`);
                     push('Column deleted');
                     await load();
@@ -386,12 +393,12 @@ export default function KanbanPage() {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
                     const r = await fetch(`/api/columns?boardId=${activeBoard.id}`, { cache: 'no-store' });
-                    if (r.status === 403) { push('Viewer: read-only permission'); return; }
+                    if (r.status === 403) { emitAuthEvent('auth:403'); return; }
                     if (!r.ok) throw new Error(`GET /columns ${r.status}`);
                     const cols: Column[] = await r.json();
                     for (const c of cols) {
-                        const del = await fetch(`/api/columns/${c.id}`, { method: 'DELETE' });
-                        if (del.status === 403) { push('Viewer: read-only permission'); return; }
+                        const del = await apiFetch(`/api/columns/${c.id}`, { method: 'DELETE' });
+                        if (del.status === 403) { emitAuthEvent('auth:403'); return; }
                     }
                     push('All columns deleted');
                     await load();
@@ -411,8 +418,8 @@ export default function KanbanPage() {
             onYes: async () => {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
-                    const r = await fetch(`/api/issues/${id}`, { method: 'DELETE' });
-                    if (r.status === 403) { push('Viewer: read-only permission'); return; }
+                    const r = await apiFetch(`/api/issues/${id}`, { method: 'DELETE' });
+                    if (r.status === 403) { emitAuthEvent('auth:403'); return; }
                     if (!r.ok) throw new Error(`Delete issue failed: ${r.status}`);
                     push('Issue deleted');
                     await load();
@@ -435,17 +442,20 @@ export default function KanbanPage() {
                 setConfirm((c) => ({ ...c, open: true }));
                 try {
                     const qs = cascade ? '?cascade=true' : '';
-                    const r = await fetch(`/api/boards/${activeBoard.id}${qs}`, { method: 'DELETE' });
+                    const r = await apiFetch(`/api/boards/${activeBoard.id}${qs}`, { method: 'DELETE' });
 
                     if (r.status === 409 && !cascade) {
                         const ok = window.confirm('This board has columns/issues. Delete EVERYTHING (cascade)?');
                         if (ok) {
-                            const r2 = await fetch(`/api/boards/${activeBoard.id}?cascade=true`, { method: 'DELETE' });
+                            const r2 = await apiFetch(`/api/boards/${activeBoard.id}?cascade=true`, { method: 'DELETE' });
                             if (!r2.ok) throw new Error(`Delete board failed: ${r2.status}`);
                         } else {
                             push('Cancelled');
                             return;
                         }
+                    } else if (r.status === 403) {
+                        emitAuthEvent('auth:403');
+                        return;
                     } else if (!r.ok) {
                         throw new Error(`Delete board failed: ${r.status}`);
                     }
@@ -542,12 +552,12 @@ export default function KanbanPage() {
                 setColumns([...others, ...nextScoped]);
 
                 const columnIds = nextScoped.map((c) => c.id);
-                const r = await fetch('/api/columns/reorder', {
+                const r = await apiFetch('/api/columns/reorder', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ boardId: activeBoard.id, columnIds }),
                 });
-                if (r.status === 403) { push('Viewer: read-only permission'); return; }
+                if (r.status === 403) { emitAuthEvent('auth:403'); return; }
                 push('Columns reordered');
                 await load();
                 return;
@@ -613,26 +623,26 @@ export default function KanbanPage() {
                 const fromIds = (updatedScoped.find((c) => c.id === fromColId)?.issues ?? []).map((i) => i.id);
 
                 if (fromColId === toColId) {
-                    const r1 = await fetch(`/api/columns/${toColId}/reorder`, {
+                    const r1 = await apiFetch(`/api/columns/${toColId}/reorder`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ issueIds: toIds }),
                     });
-                    if (r1.status === 403) { push('Viewer: read-only permission'); return; }
+                    if (r1.status === 403) { emitAuthEvent('auth:403'); return; }
                 } else {
                     const [r1, r2] = await Promise.all([
-                        fetch(`/api/columns/${toColId}/reorder`, {
+                        apiFetch(`/api/columns/${toColId}/reorder`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ issueIds: toIds }),
                         }),
-                        fetch(`/api/columns/${fromColId}/reorder`, {
+                        apiFetch(`/api/columns/${fromColId}/reorder`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ issueIds: fromIds }),
                         }),
                     ]);
-                    if (r1.status === 403 || r2.status === 403) { push('Viewer: read-only permission'); return; }
+                    if (r1.status === 403 || r2.status === 403) { emitAuthEvent('auth:403'); return; }
                 }
 
                 push('Reordered');
@@ -646,6 +656,8 @@ export default function KanbanPage() {
 
     return (
         <main className="min-h-screen bg-slate-50 text-slate-900" data-ui-scope="kanban">
+            <AuthBanners />
+
             <ConfirmModal
                 open={confirm.open}
                 title={confirm.title}
