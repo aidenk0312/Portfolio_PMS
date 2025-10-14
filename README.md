@@ -1,11 +1,12 @@
+
 # Portfolio PMS — Project Management System
 
-<p>
-  <a href="https://pms-web.vercel.app" target="_blank" rel="noopener">
+<p align="center">
+  <a href="https://YOUR_WEB_URL" target="_blank" rel="noopener">
     <img alt="Open Demo" src="https://img.shields.io/badge/Open%20Demo-live-green?style=for-the-badge">
   </a>
-  <a href="https://youtu.be/your-1min-demo" target="_blank" rel="noopener" style="margin-left:8px">
-    <img alt="Watch 1-min Demo" src="https://img.shields.io/badge/Watch-1%E2%80%91min%20demo-000?style=for-the-badge">
+  <a href="https://YOUR_WEB_URL/demo.mp4" target="_blank" rel="noopener" style="margin-left:8px">
+    <img alt="Watch 1-min demo" src="https://img.shields.io/badge/Watch-1%E2%80%91min%20demo-000?style=for-the-badge">
   </a>
 </p>
 
@@ -18,15 +19,15 @@
 
 A Kanban-based PMS designed for remote/collaborative teams. Built with **Next.js 15 (App Router, Tailwind)** and **NestJS 11 + Prisma**, backed by **PostgreSQL 16** and **Redis 7**. Authentication via **NextAuth v5 (GitHub OAuth)** with a **JWT session** that exposes an `apiToken` for API calls. Role-based access control (RBAC) supports **OWNER / ADMIN / MEMBER / VIEWER**.
 
-> <img src="https://your-cdn/kanban-hero.png" alt="Kanban UI" width="960"/>
-
-> <a href="https://youtu.be/your-1min-demo" target="_blank" rel="noopener">
->   ▶ Watch 1-min demo (YouTube)
-> </a>
+> Replace placeholders with your assets:
+> - Put a hero screenshot at `apps/web/public/images/kanban-hero.png` and link it below.
+> - Put a second board screenshot at `apps/web/public/images/kanban-boards.png`.
+> - Put your short demo clip at `apps/web/public/demo.mp4` and update the button URL above (`/demo.mp4`).
 
 ---
 
 ## Contents
+- [Live Demo & Accounts](#live-demo--accounts)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
@@ -101,8 +102,7 @@ turbo.json
 - **Dev rewrites** (web):
   - `/api/*`, `/boards/*`, `/columns/*`, `/issues/*` → `${NEXT_PUBLIC_API_BASE}` (default: `http://localhost:3001`)
 
-> [PLACEHOLDER – ARCHITECTURE DIAGRAM]  
-> Simple diagram: Web (Next.js) → API (NestJS) → PostgreSQL/Redis. Show OAuth → session (apiToken) → Authorization header flow.
+> <img src="apps/web/public/images/kanban-hero.png" alt="Kanban UI" width="960"/>
 
 ---
 
@@ -165,12 +165,12 @@ NEXTAUTH_SECRET=replace-with-32+chars
    - `403`: subtle banner; no duplicate toasts.
 
 ### Permission Matrix
-| Resource \ Action     | Read | Create | Update | Delete | Reorder | Bulk Clear | Delete Board (cascade) |
-|------------------------|:----:|:------:|:-----:|:------:|:-------:|:----------:|:-----------------------:|
-| **OWNER**              |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
-| **ADMIN**              |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
-| **MEMBER**             |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ❌            |
-| **VIEWER**             |  ✅  |   ❌   |   ❌  |   ❌   |   ❌    |     ❌     |           ❌            |
+| Resource \\ Action     | Read | Create | Update | Delete | Reorder | Bulk Clear | Delete Board (cascade) |
+|--------------------------|:----:|:------:|:-----:|:------:|:-------:|:----------:|:-----------------------:|
+| **OWNER**                |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
+| **ADMIN**                |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ✅            |
+| **MEMBER**               |  ✅  |   ✅   |   ✅  |   ✅   |   ✅    |     ✅     |           ❌            |
+| **VIEWER**               |  ✅  |   ❌   |   ❌  |   ❌   |   ❌    |     ❌     |           ❌            |
 
 ### Test Scenarios
 - **OWNER vs VIEWER**
@@ -212,7 +212,7 @@ node scripts/role.js bulk ./emails.csv      # CSV: "email,ROLE", header optional
   - `401` expired session → sticky top banner with **Sign in again**
   - `403` insufficient role → subtle banner; no duplicate toasts
 
-> <img src="https://your-cdn/kanban-boards.png" alt="Board picker and DnD" width="960"/>
+> <img src="apps/web/public/images/kanban-boards.png" alt="Board picker and DnD" width="960"/>
 
 ---
 
@@ -253,7 +253,12 @@ docker build -f apps/api/Dockerfile -t pms-api:local .
 
 ## Troubleshooting (Extended)
 
-### 1) Setup & Environment
+### Live demo 503: `MIDDLEWARE_RUNTIME_DEPRECATED` (Vercel)
+- Remove legacy Edge `middleware.ts` or refactor it to Node.js runtime.
+- Ensure Next.js >= 15 and no experimental Edge middleware is enabled.
+- Redeploy after removing/renaming `apps/web/src/middleware.ts` (if present).
+
+### Setup & Environment
 - Wrong env file path → web: `apps/web/.env.local`, api: `apps/api/.env`
 - Restart dev servers after env change.
 - Strong secret for both sides:
@@ -261,56 +266,59 @@ docker build -f apps/api/Dockerfile -t pms-api:local .
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-### 2) Auth / OAuth / NextAuth
+### Auth / OAuth / NextAuth
 - Callback must be exactly `http://localhost:3000/api/auth/callback/github` (prod는 Vercel URL)
 - 401 on write → login + check `Authorization: Bearer <token>`
 - Avoid proxying `/api/auth/*` via rewrites
 
-### 3) RBAC / Permissions
+### RBAC / Permissions
 - Viewer cannot write by design → promote with Seed CLI
 - 403 banner requires fetch wrapper events + `AuthBanners` mount
 - Role badge fetches `/api/me` with `cache:'no-store'`
 
-### 4) API & Proxy
+### API & Proxy
 - `NEXT_PUBLIC_API_BASE=http://localhost:3001` in web
 - Restart dev server after change:
 ```bash
 rm -rf apps/web/.next && pnpm -C apps/web dev
 ```
 
-### 5) Database / Prisma
+### Database / Prisma
 ```bash
 pnpm -C apps/api prisma format
 pnpm -C apps/api prisma validate
 pnpm -C apps/api prisma migrate deploy
 ```
 
-### 6) Kanban UI & DnD
+### Kanban UI & DnD
 - VIEWER blocks DnD
 - Column reorder → `POST /columns/reorder`
 - Issue cross-column move → reorder both columns
 
-### 7) Common HTTP Errors
+### Common HTTP Errors
 | Code | Meaning | Fix |
 |-----:|--------|-----|
 | 401  | Missing/invalid token | Log in; ensure Bearer header |
 | 403  | Role not allowed | Promote role |
-| 409  | Board delete restricted | Use `?cascade=true` |
+| 404  | Resource not found | Check IDs & rewrites |
+| 409  | Board delete restricted | Use `?cascade=true` or clean columns |
+| 422  | Invalid payload | Check required fields |
+| 500  | Server error | Inspect API logs & DB connection |
 
 ---
 
 ## Security & Limitations
-This project is for learning/demo purposes. Not production-hardened (password recovery, rate limiting, audit log, Sentry, key rotation, etc.)
+Learning-focused project; **not** production-hardened. Missing: password recovery, rate limit, Sentry, WAF, privacy review, backups, zero-downtime migrations.
 
 ---
 
 ## Change History (highlights)
-- Role badge with `/api/me` (no-store)
+- Role badge in header with `/api/me` (no-store)
 - Viewer read-only gating + DnD block
-- Fetch wrapper Bearer injection + 401/403 events
-- 401/403 UX banners
-- Board delete 409 vs cascade
-- Role Seed CLI
+- Fetch wrapper with Bearer injection (non-GET) + 401/403 events
+- 401/403 UX banners (sticky re-auth, subtle 403)
+- Board delete 409 vs cascade path
+- Role Seed CLI (set/bulk)
 
 ---
 
