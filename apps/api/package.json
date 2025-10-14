@@ -22,7 +22,10 @@
     "test:e2e:path": "jest -c jest.e2e.config.ts --runTestsByPath test/smoke.e2e-spec.ts --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "role": "node scripts/role.js",
+    "role:set": "node scripts/role.js set",
+    "role:bulk": "node scripts/role.js bulk"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
