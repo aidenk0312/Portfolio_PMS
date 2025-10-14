@@ -1,6 +1,6 @@
 import request from 'supertest';
 
-const API = 'http://localhost:3001';
+const API = process.env.API_BASE || 'http://localhost:3001';
 
 describe('PMS Smoke', () => {
     let workspaceId = '';
@@ -73,5 +73,22 @@ describe('PMS Smoke', () => {
     it('delete board cascade ok', async () => {
         const res = await request(API).delete(`/boards/${boardId}`).query({ cascade: 'true' });
         expect(res.status).toBe(204);
+    });
+
+    describe('Smoke', () => {
+        it('GET /health ok', async () => {
+            await request(API).get('/health').expect(200);
+        });
+
+        it('GET /boards?workspaceId returns array (0+)', async () => {
+            const ws = process.env.NEXT_PUBLIC_WORKSPACE_ID || 'ws_local';
+            const res = await request(API).get(`/boards?workspaceId=${ws}`).expect(200);
+            expect(Array.isArray(res.body)).toBe(true);
+        });
+
+        it('POST /boards without token -> 401 or 403', async () => {
+            const res = await request(API).post('/boards').send({ name: 'x', workspaceId: 'ws_local' });
+            expect([401, 403]).toContain(res.status);
+        });
     });
 });

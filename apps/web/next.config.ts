@@ -15,10 +15,10 @@ const nextConfig: NextConfig = {
                 { source: "/api/columns", destination: `${api}/columns` },
                 { source: "/api/columns/:path*", destination: `${api}/columns/:path*` },
                 { source: "/api/issues", destination: `${api}/issues` },
-                { source: "/api/issues/:path*", destination: `${api}/issues/:path*` },
+                { source: "/api/issues/:path*", destination: `${api}/issues/:path*` }
             ];
-        },
-    }),
+        }
+    })
 };
 
 export default nextConfig;

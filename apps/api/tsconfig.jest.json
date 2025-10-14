@@ -2,11 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "commonjs",
-    "moduleResolution": "node16",
     "esModuleInterop": true,
-    "types": ["jest", "node"],
-    "outDir": "./dist-test",
-    "resolvePackageJsonExports": false
+    "types": ["jest", "node"]
   },
-  "include": ["test/**/*.ts"]
+  "include": ["test/**/*.ts", "src/**/*.ts"]
 }
